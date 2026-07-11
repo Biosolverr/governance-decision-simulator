@@ -207,6 +207,7 @@
       <span class="status" id="status-line"></span>
     </div>
     <div class="account-line" id="account-line"></div>
+    <pre id="debug-receipt" style="display:none; margin-top:16px; padding:14px; background:var(--ink); border:1px solid var(--hair); border-radius:var(--radius); font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-muted); white-space:pre-wrap; word-break:break-all; max-height:300px; overflow:auto;"></pre>
   </div>
 
   <div id="results">
@@ -333,6 +334,22 @@ async function initClient() {
       true
     );
   }
+}
+
+function safeStringify(value) {
+  const seen = new WeakSet();
+  return JSON.stringify(
+    value,
+    (key, val) => {
+      if (typeof val === "bigint") return val.toString() + "n";
+      if (typeof val === "object" && val !== null) {
+        if (seen.has(val)) return "[circular]";
+        seen.add(val);
+      }
+      return val;
+    },
+    2
+  );
 }
 
 function confidenceOrder(level) {
@@ -545,11 +562,20 @@ async function runSimulation() {
     // instead of a clear error.
     if (!report || typeof report !== "object" || !("disclaimer" in report)) {
       console.error("Unexpected report shape — full receipt logged above.", report);
+
+      // Show the raw receipt directly on the page too — easier to copy
+      // than digging through devtools console for some people.
+      const debugEl = document.getElementById("debug-receipt");
+      debugEl.style.display = "block";
+      debugEl.textContent =
+        "DEBUG — full transaction receipt (copy this and send it back):\n\n" +
+        safeStringify(receipt);
+
       throw new Error(
         "Got a response, but it doesn't look like a simulation report " +
-        "(missing expected fields). Check the browser console (F12) for " +
-        "the full transaction receipt — the field name used to extract " +
-        "the result from it may need adjusting for your genlayer-js version."
+        "(missing expected fields). The raw receipt is now printed below " +
+        "the form on this page — copy it and send it back so the field " +
+        "name used to extract the result can be corrected."
       );
     }
 
