@@ -250,16 +250,12 @@
 const CONTRACT_ADDRESS = "0x8c47cF1337b2BE6B90cB3A44A580878AA25d0d5A";
 const RPC_URL = "https://studio.genlayer.com/api";
 
-// Demo proposal chips are loaded from demo/proposals.json at runtime,
-// so the single source of truth for example proposals lives in one file
-// rather than being duplicated inside this script. If the fetch fails
-// (e.g. this page was opened directly as a local file:// path instead of
-// being served, or the repo layout was changed), a small hardcoded
-// fallback keeps the demo chips from silently disappearing.
-const PROPOSALS_JSON_PATH = "../demo/proposals.json";
-const FALLBACK_DEMO_PROPOSALS = [
+const DEMO_PROPOSALS = [
   "Increase validator rewards from 5% to 8%.",
   "Lower the quorum requirement for governance votes from 20% to 12% of staked tokens.",
+  "Fund the grant program with an additional $50,000 USDC to support new ecosystem projects.",
+  "Reduce the protocol trading fee by 0.5% to remain competitive with other DEXs.",
+  "Increase the annual token emission rate by 15% to fund liquidity mining incentives.",
 ];
 
 const statusLine = document.getElementById("status-line");
@@ -277,37 +273,18 @@ function setStatus(text, isError = false) {
   statusLine.classList.toggle("err", isError);
 }
 
-function renderDemoChips(proposalTexts) {
-  chipsEl.innerHTML = "";
-  proposalTexts.forEach((text) => {
-    const chip = document.createElement("span");
-    chip.className = "chip";
-    chip.textContent = text.length > 46 ? text.slice(0, 46) + "…" : text;
-    chip.title = text;
-    chip.addEventListener("click", () => { textarea.value = text; });
-    chipsEl.appendChild(chip);
-  });
-}
-
-async function loadDemoProposals() {
-  try {
-    const res = await fetch(PROPOSALS_JSON_PATH);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const texts = (data.proposals || []).map((p) => p.text).filter(Boolean);
-    if (texts.length === 0) throw new Error("proposals.json had no usable entries");
-    renderDemoChips(texts);
-  } catch (err) {
-    console.warn("Could not load demo/proposals.json, using fallback chips:", err);
-    renderDemoChips(FALLBACK_DEMO_PROPOSALS);
-  }
-}
-
-loadDemoProposals();
+// Render the demo-proposal chips.
+DEMO_PROPOSALS.forEach((text) => {
+  const chip = document.createElement("span");
+  chip.className = "chip";
+  chip.textContent = text.length > 46 ? text.slice(0, 46) + "…" : text;
+  chip.title = text;
+  chip.addEventListener("click", () => { textarea.value = text; });
+  chipsEl.appendChild(chip);
+});
 
 let client = null;
 let account = null;
-let TransactionStatus = null;
 
 async function initClient() {
   setStatus("Creating ephemeral account…");
@@ -319,9 +296,6 @@ async function initClient() {
     const { studionet } = await import(
       "https://esm.sh/genlayer-js@latest/chains"
     );
-    ({ TransactionStatus } = await import(
-      "https://esm.sh/genlayer-js@latest/types"
-    ));
 
     account = createAccount();
     client = createClient({ chain: studionet, endpoint: RPC_URL, account });
@@ -339,6 +313,44 @@ async function initClient() {
 
 function confidenceOrder(level) {
   return { High: 0, Medium: 1, Low: 2, "Very Low": 3 }[level] ?? 1;
+}
+
+/**
+ * Wraps client.waitForTransactionReceipt() in a retry loop.
+ *
+ * WHY: simulate_proposal is a nondet write — GenVM runs the LLM call
+ * for the leader, then independently for each validator, and this can
+ * take well over a minute if the network goes through more than one
+ * leader rotation (observed directly during Studio testing, see
+ * demo/proof.json). The SDK's own internal timeout for a single
+ * waitForTransactionReceipt() call may be shorter than that, and its
+ * exact default isn't something we could verify against a live SDK
+ * build in this environment — so instead of guessing at timeout/retry
+ * option names that might not exist on this SDK version, we just call
+ * it again on a timeout. waitForTransactionReceipt is a read-only poll
+ * (it doesn't resubmit the transaction), so retrying it is always safe.
+ * Any error that ISN'T a timeout (e.g. the tx actually reverted) is
+ * re-thrown immediately instead of being retried.
+ */
+async function waitForReceiptWithRetries(txHash, { maxWaitMs = 180000, retryDelayMs = 4000 } = {}) {
+  const start = Date.now();
+  let lastErr;
+  while (Date.now() - start < maxWaitMs) {
+    try {
+      return await client.waitForTransactionReceipt({ hash: txHash });
+    } catch (err) {
+      const isTimeout = /timed out|timeout/i.test(err?.message || "");
+      if (!isTimeout) throw err;
+      lastErr = err;
+      const elapsedS = Math.round((Date.now() - start) / 1000);
+      setStatus(
+        `Still waiting for validator consensus… (${elapsedS}s elapsed, tx ${txHash.slice(0, 10)}…) ` +
+        `LLM-backed transactions can take a minute or more, especially if the leader rotates.`
+      );
+      await new Promise((r) => setTimeout(r, retryDelayMs));
+    }
+  }
+  throw lastErr || new Error(`Timed out waiting for transaction ${txHash} after ${maxWaitMs / 1000}s.`);
 }
 
 function drawCone(scenarios) {
@@ -487,25 +499,35 @@ async function runSimulation() {
       args: [text],
     });
 
-    setStatus(
-      `Waiting for validator consensus… this can take 1-3+ minutes ` +
-      `(tx ${txHash.slice(0, 10)}…)`
-    );
-    // IMPORTANT: waitForTransactionReceipt needs an explicit status +
-    // generous retries/interval, or it times out on the SDK's short
-    // default long before nondet LLM validator consensus actually
-    // finishes (observed: "Timed out ... current status: 3" — the
-    // transaction was still progressing through consensus, not stuck).
-    // retries * interval = max wait time; 100 * 5000ms = ~8 minutes.
-    const receipt = await client.waitForTransactionReceipt({
-      hash: txHash,
-      status: TransactionStatus.ACCEPTED,
-      retries: 100,
-      interval: 5000,
-    });
+    setStatus(`Waiting for consensus… (tx ${txHash.slice(0, 10)}…)`);
+    const receipt = await waitForReceiptWithRetries(txHash);
 
-    const raw = receipt.result ?? receipt.data ?? receipt.returnValue;
+    // DEBUG: log the full receipt so we can see its real shape in the
+    // browser console — the exact field holding the contract's return
+    // value depends on the genlayer-js version, and the guess below
+    // (result / data / returnValue) has NOT been verified against a live
+    // SDK build. If simulations come back empty, open devtools (F12) and
+    // check what this logs.
+    console.log("Transaction receipt:", receipt);
+
+    const raw =
+      receipt.result ?? receipt.data ?? receipt.returnValue ?? receipt.output ?? receipt.value;
     const report = typeof raw === "string" ? JSON.parse(raw) : raw;
+
+    // Sanity-check the shape before treating this as a real report — every
+    // real simulate_proposal report has a `disclaimer` field. Without this
+    // check, picking the wrong field off `receipt` above would silently
+    // render an empty-looking "success" (unknown category, 0 scenarios)
+    // instead of a clear error.
+    if (!report || typeof report !== "object" || !("disclaimer" in report)) {
+      console.error("Unexpected report shape — full receipt logged above.", report);
+      throw new Error(
+        "Got a response, but it doesn't look like a simulation report " +
+        "(missing expected fields). Check the browser console (F12) for " +
+        "the full transaction receipt — the field name used to extract " +
+        "the result from it may need adjusting for your genlayer-js version."
+      );
+    }
 
     setStatus("Simulation complete.");
     renderReport(report);
