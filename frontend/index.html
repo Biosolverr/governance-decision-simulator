@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Futures Cone — AI Governance Decision Simulator</title>
+<meta name="description" content="Simulate plausible futures for a DAO governance proposal. Never approves, rejects, or scores — only maps what could happen." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#12121a;
+    --surface:#1b1b27;
+    --surface-raised:#22222f;
+    --hair:#33323f;
+    --gold:#c9a227;
+    --gold-dim:#8a7020;
+    --teal:#4fb8a6;
+    --brick:#b5533c;
+    --text:#edeae0;
+    --text-muted:#8b8a99;
+    --text-faint:#5c5b68;
+    --radius:2px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--ink);
+    color:var(--text);
+    font-family:'Inter',system-ui,sans-serif;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    background-image:
+      radial-gradient(circle at 15% 8%, rgba(201,162,39,0.05), transparent 40%),
+      radial-gradient(circle at 85% 92%, rgba(79,184,166,0.04), transparent 40%);
+    pointer-events:none;
+    z-index:0;
+  }
+  .wrap{max-width:920px; margin:0 auto; padding:0 24px; position:relative; z-index:1;}
+
+  /* ---------- header ---------- */
+  header{padding:56px 0 28px; border-bottom:1px solid var(--hair);}
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px; letter-spacing:0.14em; text-transform:uppercase;
+    color:var(--gold); margin:0 0 14px;
+  }
+  h1{
+    font-family:'Fraunces',serif; font-weight:500; font-style:italic;
+    font-size:clamp(32px,5vw,50px); line-height:1.08; margin:0 0 16px; letter-spacing:-0.01em;
+  }
+  header p.lede{
+    color:var(--text-muted); max-width:560px; font-size:16px; margin:0;
+  }
+  .disclaimer-banner{
+    margin-top:22px; padding:12px 16px;
+    background:var(--surface); border:1px solid var(--hair); border-left:2px solid var(--brick);
+    font-size:13px; color:var(--text-muted); border-radius:var(--radius);
+  }
+  .disclaimer-banner b{color:var(--text);}
+
+  /* ---------- futures cone ---------- */
+  .cone-stage{padding:44px 0 8px;}
+  .cone-caption{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-faint);
+    text-align:center; margin-top:6px; letter-spacing:0.05em;
+  }
+
+  /* ---------- control panel ---------- */
+  .panel{
+    background:var(--surface); border:1px solid var(--hair); border-radius:var(--radius);
+    padding:28px; margin:36px 0;
+  }
+  .panel h2{
+    font-family:'Fraunces',serif; font-weight:500; font-size:20px; margin:0 0 4px;
+  }
+  .panel .hint{color:var(--text-muted); font-size:13px; margin:0 0 18px;}
+  textarea{
+    width:100%; min-height:96px; resize:vertical;
+    background:var(--ink); color:var(--text); border:1px solid var(--hair);
+    border-radius:var(--radius); padding:14px; font-family:'Inter',sans-serif; font-size:14.5px;
+    outline:none; transition:border-color .15s ease;
+  }
+  textarea:focus{border-color:var(--gold-dim);}
+  .chips{display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0;}
+  .chip{
+    font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--text-muted);
+    background:var(--surface-raised); border:1px solid var(--hair); border-radius:100px;
+    padding:6px 12px; cursor:pointer; transition:.15s ease;
+  }
+  .chip:hover{border-color:var(--gold-dim); color:var(--gold);}
+  .actions{display:flex; align-items:center; gap:14px; margin-top:20px;}
+  button.primary{
+    font-family:'Inter',sans-serif; font-weight:600; font-size:14px;
+    background:var(--gold); color:#1a1508; border:none; border-radius:var(--radius);
+    padding:12px 22px; cursor:pointer; transition:.15s ease;
+  }
+  button.primary:hover{background:#ddb52d;}
+  button.primary:disabled{background:var(--hair); color:var(--text-faint); cursor:not-allowed;}
+  .status{font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--text-muted);}
+  .status.err{color:var(--brick);}
+  .account-line{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-faint);
+    margin-top:16px; word-break:break-all;
+  }
+
+  /* ---------- results ---------- */
+  #results{margin:44px 0 80px; display:none;}
+  #results.visible{display:block;}
+  .meta-row{
+    display:flex; flex-wrap:wrap; gap:10px 22px; margin-bottom:28px;
+    font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text-muted);
+  }
+  .meta-row span b{color:var(--text); font-weight:500;}
+
+  .scenario-grid{display:flex; flex-direction:column; gap:2px;}
+  .scenario{
+    background:var(--surface); border:1px solid var(--hair); border-radius:var(--radius);
+    padding:22px 24px; position:relative;
+  }
+  .scenario + .scenario{margin-top:10px;}
+  .scenario-head{display:flex; justify-content:space-between; align-items:baseline; gap:14px; flex-wrap:wrap;}
+  .scenario h3{
+    font-family:'Fraunces',serif; font-weight:500; font-size:19px; margin:0;
+  }
+  .confidence{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:0.08em; text-transform:uppercase;
+    padding:3px 9px; border-radius:100px; white-space:nowrap; border:1px solid var(--hair);
+  }
+  .confidence[data-level="High"]{color:var(--teal); border-color:rgba(79,184,166,0.4);}
+  .confidence[data-level="Medium"]{color:var(--gold); border-color:rgba(201,162,39,0.4);}
+  .confidence[data-level="Low"]{color:var(--text-muted); border-color:var(--hair);}
+  .confidence[data-level="Very Low"]{color:var(--brick); border-color:rgba(181,83,60,0.4);}
+  .narrative{color:var(--text-muted); font-size:14.5px; margin:10px 0 16px;}
+  .effect-grid{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:14px; font-size:12.5px;
+  }
+  .effect-cat{color:var(--text-faint); font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; margin-bottom:5px;}
+  .effect-cat + ul{margin:0; padding-left:16px; color:var(--text-muted);}
+  .effect-cat + ul li{margin-bottom:3px;}
+  .risk-row{margin-top:16px; padding-top:14px; border-top:1px dashed var(--hair);}
+  .risk-row .effect-cat{color:var(--brick);}
+  .assumptions{margin-top:14px; font-size:12.5px; color:var(--text-faint);}
+  .assumptions b{color:var(--text-muted); font-weight:500;}
+
+  .consensus-block{
+    margin-top:34px; background:var(--surface-raised); border:1px solid var(--hair);
+    border-radius:var(--radius); padding:24px;
+  }
+  .consensus-block h3{font-family:'Fraunces',serif; font-weight:500; font-size:17px; margin:0 0 16px;}
+  .consensus-cols{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:20px;}
+  .consensus-col .label{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--text-faint); margin-bottom:8px;
+  }
+  .consensus-col ul{margin:0; padding-left:16px; font-size:13px; color:var(--text-muted);}
+  .consensus-col ul li{margin-bottom:5px;}
+  .consensus-col .empty{color:var(--text-faint); font-size:12.5px; font-style:italic;}
+
+  footer{border-top:1px solid var(--hair); padding:26px 0 60px; color:var(--text-faint); font-size:12px;}
+  footer a{color:var(--text-muted);}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">GenLayer Intelligent Contract — Research Demo</p>
+    <h1>Futures Cone</h1>
+    <p class="lede">
+      A governance decision-support simulator. Give it a proposal; it maps
+      several plausible futures if it were accepted — never a score,
+      never a recommendation, never a vote.
+    </p>
+    <div class="disclaimer-banner">
+      <b>This tool never approves, rejects, ranks, or scores proposals.</b>
+      It generates multiple unranked plausible futures to inform human
+      governance participants, run through nondeterministic LLM execution
+      with GenLayer validator consensus.
+    </div>
+  </header>
+
+  <div class="cone-stage">
+    <svg id="cone" viewBox="0 0 880 220" width="100%" style="display:block;">
+      <!-- static "today" spine, branches drawn in dynamically -->
+      <line x1="40" y1="110" x2="140" y2="110" stroke="var(--hair)" stroke-width="2"/>
+      <circle cx="40" cy="110" r="5" fill="var(--gold)"/>
+      <text x="20" y="140" fill="var(--text-faint)" font-family="IBM Plex Mono" font-size="11">TODAY</text>
+      <g id="cone-branches"></g>
+    </svg>
+    <p class="cone-caption">plausible futures radiate outward — none is the predicted outcome</p>
+  </div>
+
+  <div class="panel">
+    <h2>Simulate a proposal</h2>
+    <p class="hint">Paste a governance proposal, or try one of the examples below.</p>
+    <textarea id="proposal-text" placeholder="e.g. Increase validator rewards from 5% to 8%.">Increase validator rewards from 5% to 8%.</textarea>
+    <div class="chips" id="demo-chips"></div>
+    <div class="actions">
+      <button class="primary" id="submit-btn">Run simulation</button>
+      <span class="status" id="status-line"></span>
+    </div>
+    <div class="account-line" id="account-line"></div>
+  </div>
+
+  <div id="results">
+    <div class="meta-row" id="meta-row"></div>
+    <div class="scenario-grid" id="scenario-grid"></div>
+    <div class="consensus-block" id="consensus-block"></div>
+  </div>
+
+  <footer>
+    Deployed as a single-file static frontend. Contract address is
+    configured at the top of the page's script — see
+    <code>CONTRACT_ADDRESS</code> in source. Built for GenLayer Studionet.
+    <br/>Read the full write-up in <a href="https://github.com" target="_blank" rel="noopener">docs/architecture.md</a> of the repository.
+  </footer>
+</div>
+
+<script type="module">
+/* =========================================================================
+   AI Governance Decision Simulator — frontend
+   -------------------------------------------------------------------------
+   Single-file, no build step. Deploy target: Vercel static hosting.
+
+   Wallet-free by design: on load we generate an EPHEMERAL account via
+   genlayer-js (createAccount()) — same pattern used in the earlier
+   Decentralized Fact Checker demo. No MetaMask, no wallet connect UI.
+   This is intentional for a research PoC: every visitor gets a throwaway
+   account good enough to call a public write method and read the result.
+
+   IMPORTANT: the exact genlayer-js import path / client API shown below
+   follows the pattern used in this project's prior GenLayer demos
+   (ephemeral createAccount() + Studionet RPC, client.writeContract /
+   client.readContract). Pin this against whatever genlayer-js version you
+   have installed/available at deploy time — SDK surfaces evolve, and this
+   file intentionally has zero build step, so there's no lockfile pinning
+   the version for you. If the import below 404s, check the genlayer-js
+   docs for the current CDN path and client method names, and swap only
+   this import block + the two call sites marked below.
+   ========================================================================= */
+
+// --- Fill this in after deploying contract/governance_simulator.py -------
+const CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000000";
+const RPC_URL = "https://studio.genlayer.com/api";
+
+const DEMO_PROPOSALS = [
+  "Increase validator rewards from 5% to 8%.",
+  "Lower the quorum requirement for governance votes from 20% to 12% of staked tokens.",
+  "Fund the grant program with an additional $50,000 USDC to support new ecosystem projects.",
+  "Reduce the protocol trading fee by 0.5% to remain competitive with other DEXs.",
+  "Increase the annual token emission rate by 15% to fund liquidity mining incentives.",
+];
+
+const statusLine = document.getElementById("status-line");
+const accountLine = document.getElementById("account-line");
+const submitBtn = document.getElementById("submit-btn");
+const textarea = document.getElementById("proposal-text");
+const chipsEl = document.getElementById("demo-chips");
+const resultsEl = document.getElementById("results");
+const metaRowEl = document.getElementById("meta-row");
+const scenarioGridEl = document.getElementById("scenario-grid");
+const consensusBlockEl = document.getElementById("consensus-block");
+
+function setStatus(text, isError = false) {
+  statusLine.textContent = text;
+  statusLine.classList.toggle("err", isError);
+}
+
+// Render the demo-proposal chips.
+DEMO_PROPOSALS.forEach((text) => {
+  const chip = document.createElement("span");
+  chip.className = "chip";
+  chip.textContent = text.length > 46 ? text.slice(0, 46) + "…" : text;
+  chip.title = text;
+  chip.addEventListener("click", () => { textarea.value = text; });
+  chipsEl.appendChild(chip);
+});
+
+let client = null;
+let account = null;
+
+async function initClient() {
+  setStatus("Creating ephemeral account…");
+  try {
+    // --- genlayer-js import (see note above if this path is stale) ------
+    const { createClient, createAccount } = await import(
+      "https://esm.sh/genlayer-js@latest"
+    );
+    const { studionet } = await import(
+      "https://esm.sh/genlayer-js@latest/chains"
+    );
+
+    account = createAccount();
+    client = createClient({ chain: studionet, endpoint: RPC_URL, account });
+
+    accountLine.textContent = `Ephemeral account: ${account.address}`;
+    setStatus("Ready.");
+  } catch (err) {
+    console.error(err);
+    setStatus(
+      "Could not load genlayer-js from CDN — check console and the SDK import note in source.",
+      true
+    );
+  }
+}
+
+function confidenceOrder(level) {
+  return { High: 0, Medium: 1, Low: 2, "Very Low": 3 }[level] ?? 1;
+}
+
+function drawCone(scenarios) {
+  const g = document.getElementById("cone-branches");
+  g.innerHTML = "";
+  const n = scenarios.length || 1;
+  const originX = 140, originY = 110;
+  const spread = 160; // total vertical spread of the fan
+  scenarios.forEach((s, i) => {
+    const t = n === 1 ? 0.5 : i / (n - 1);
+    const endY = originY - spread / 2 + t * spread;
+    const endX = originX + 560;
+    const opacity = { High: 0.9, Medium: 0.65, Low: 0.4, "Very Low": 0.25 }[s.confidence] ?? 0.5;
+    const color = i % 2 === 0 ? "var(--gold)" : "var(--teal)";
+
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const midX = originX + 280;
+    path.setAttribute(
+      "d",
+      `M ${originX} ${originY} C ${midX} ${originY}, ${midX} ${endY}, ${endX} ${endY}`
+    );
+    path.setAttribute("stroke", color);
+    path.setAttribute("stroke-width", "1.6");
+    path.setAttribute("fill", "none");
+    path.setAttribute("opacity", opacity.toString());
+    g.appendChild(path);
+
+    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dot.setAttribute("cx", endX);
+    dot.setAttribute("cy", endY);
+    dot.setAttribute("r", "3.5");
+    dot.setAttribute("fill", color);
+    dot.setAttribute("opacity", opacity.toString());
+    g.appendChild(dot);
+  });
+}
+
+function renderEffectList(label, items) {
+  if (!items || items.length === 0) return "";
+  return `<div><div class="effect-cat">${label}</div><ul>${items
+    .map((e) => `<li>${escapeHtml(e)}</li>`)
+    .join("")}</ul></div>`;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = String(str);
+  return div.innerHTML;
+}
+
+function renderReport(report) {
+  metaRowEl.innerHTML = `
+    <span>Category: <b>${escapeHtml(report.detected_proposal_type || "unknown")}</b></span>
+    <span>Time horizon: <b>${escapeHtml(report.simulation_time_horizon || "—")}</b></span>
+    <span>Compound proposal: <b>${report.is_compound_proposal ? "yes" : "no"}</b></span>
+    <span>Scenarios: <b>${(report.generated_scenarios || []).length}</b></span>
+  `;
+
+  const scenarios = (report.generated_scenarios || [])
+    .slice()
+    .sort((a, b) => confidenceOrder(a.confidence) - confidenceOrder(b.confidence));
+
+  scenarioGridEl.innerHTML = scenarios
+    .map((s) => {
+      const assumptions = (s.key_assumptions || [])
+        .map((a) => (typeof a === "string" ? a : a.statement))
+        .filter(Boolean);
+      const risks = (s.risk_factors || [])
+        .map((r) => (typeof r === "string" ? r : `${r.description} (${r.severity}/${r.likelihood})`))
+        .filter(Boolean);
+
+      return `
+        <div class="scenario">
+          <div class="scenario-head">
+            <h3>${escapeHtml(s.title)}</h3>
+            <span class="confidence" data-level="${escapeHtml(s.confidence)}">${escapeHtml(s.confidence)}</span>
+          </div>
+          <p class="narrative">${escapeHtml(s.narrative)}</p>
+          <div class="effect-grid">
+            ${renderEffectList("Treasury", s.treasury_effects)}
+            ${renderEffectList("Governance", s.governance_effects)}
+            ${renderEffectList("Validators", s.validator_effects)}
+            ${renderEffectList("Community", s.community_effects)}
+            ${renderEffectList("Protocol", s.protocol_effects)}
+          </div>
+          ${
+            risks.length
+              ? `<div class="risk-row">${renderEffectList("Risk factors", risks)}</div>`
+              : ""
+          }
+          ${
+            assumptions.length
+              ? `<div class="assumptions"><b>Key assumptions:</b> ${assumptions
+                  .map(escapeHtml)
+                  .join("; ")}</div>`
+              : ""
+          }
+        </div>
+      `;
+    })
+    .join("");
+
+  const cs = report.consensus_summary || {};
+  const col = (label, items) => `
+    <div class="consensus-col">
+      <div class="label">${label}</div>
+      ${
+        items && items.length
+          ? `<ul>${items.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`
+          : `<div class="empty">none in this run</div>`
+      }
+    </div>
+  `;
+  consensusBlockEl.innerHTML = `
+    <h3>Consensus summary</h3>
+    <div class="consensus-cols">
+      ${col("Areas of agreement", cs.areas_of_agreement)}
+      ${col("Areas of disagreement", cs.areas_of_disagreement)}
+      ${col("Alternative outcomes", cs.interesting_alternative_outcomes)}
+    </div>
+  `;
+
+  drawCone(scenarios);
+  resultsEl.classList.add("visible");
+}
+
+async function runSimulation() {
+  const text = textarea.value.trim();
+  if (!text) {
+    setStatus("Enter a proposal first.", true);
+    return;
+  }
+  if (!client) {
+    setStatus("Client not ready yet — see status above.", true);
+    return;
+  }
+
+  submitBtn.disabled = true;
+  setStatus("Submitting transaction…");
+
+  try {
+    // --- contract call (see SDK import note above if method names differ)
+    const txHash = await client.writeContract({
+      address: CONTRACT_ADDRESS,
+      functionName: "simulate_proposal",
+      args: [text],
+    });
+
+    setStatus(`Waiting for consensus… (tx ${txHash.slice(0, 10)}…)`);
+    const receipt = await client.waitForTransactionReceipt({ hash: txHash });
+
+    const raw = receipt.result ?? receipt.data ?? receipt.returnValue;
+    const report = typeof raw === "string" ? JSON.parse(raw) : raw;
+
+    setStatus("Simulation complete.");
+    renderReport(report);
+  } catch (err) {
+    console.error(err);
+    setStatus(`Failed: ${err.message || err}`, true);
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+submitBtn.addEventListener("click", runSimulation);
+initClient();
+</script>
+</body>
+</html>
