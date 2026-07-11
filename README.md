@@ -39,9 +39,10 @@ governance-decision-simulator/
 ├── contract/
 │   └── governance_simulator.py   # the Intelligent Contract (single file, GenVM-deployable)
 ├── frontend/
-│   └── index.html                # single-file frontend, no build step
+│   ├── index.html                # single-file frontend, no build step
+│   └── proposals.json            # duplicate of demo/proposals.json (see below)
 ├── demo/
-│   ├── proposals.json            # example proposals (used as chips in the frontend)
+│   ├── proposals.json            # example proposals — source of truth; duplicated into frontend/ for deployment
 │   └── proof.json                # real Studio test results: tx hashes, consensus, reports
 ├── docs/
 │   ├── architecture.md           # pipeline diagram + design decisions
@@ -56,11 +57,12 @@ governance-decision-simulator/
 1. Deploy `contract/governance_simulator.py` to GenLayer Studionet.
 2. Copy the deployed contract address into `frontend/index.html`
    (`CONTRACT_ADDRESS` constant near the top of the `<script>` block).
-3. Deploy this repository to Vercel with **Root Directory set to the
-   repository root** (not `frontend/`). The frontend fetches
-   `../demo/proposals.json` at runtime for its example-proposal chips, so
-   `demo/` needs to be served alongside `frontend/`. Open
-   `<your-deployment>/frontend/index.html`.
+3. Deploy this repository to Vercel with **Root Directory set to
+   `frontend`**. `frontend/proposals.json` is a duplicated copy of
+   `demo/proposals.json` kept in this folder specifically so the
+   example-chip fetch (`./proposals.json`) works regardless of Root
+   Directory settings — Vercel will serve `index.html` at your deployment's
+   root URL automatically.
 4. Paste a governance proposal (or click one of the example chips) and
    submit — the contract returns the structured simulation report.
 
