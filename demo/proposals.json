@@ -1,0 +1,65 @@
+# AI Governance Decision Simulator
+
+Research / proof-of-concept **GenLayer Intelligent Contract** that simulates the
+possible consequences of DAO governance proposals **before** they are voted on.
+
+> The contract does **not** approve, reject, score or rank proposals.
+> It only generates multiple plausible future scenarios to support human decision-making.
+
+## Idea
+
+Instead of asking *"Is this proposal good?"*, the system asks:
+
+> "If this proposal is accepted, what could realistically happen over the following months?"
+
+The contract classifies the proposal, builds a category-specific simulation prompt,
+runs nondeterministic LLM generation across validators, normalizes and merges the
+resulting scenarios, estimates confidence, and returns a structured consensus report.
+
+## Status
+
+🚧 Work in progress — built stage by stage. See [`docs/architecture.md`](docs/architecture.md)
+for the full pipeline and [`docs/progress.md`](docs/progress.md) for build history.
+
+## Repository structure
+
+```
+governance-decision-simulator/
+├── contract/            # GenLayer Intelligent Contract (Python)
+│   └── governance_simulator.py
+├── frontend/            # Single-file frontend (deploy target: Vercel)
+│   └── index.html
+├── demo/                # Example proposals + demo runner
+│   ├── proposals.json
+│   └── demo.py
+├── tests/               # Unit tests for parser/classifier/report builder
+├── docs/                # Architecture docs, diagrams, progress log
+├── requirements.txt
+├── .env.example
+└── LICENSE
+```
+
+## Quick start (GenLayer Studio)
+
+1. Deploy `contract/governance_simulator.py` to GenLayer Studionet.
+2. Copy the deployed contract address into `frontend/index.html` (`CONTRACT_ADDRESS` constant).
+3. Deploy this repository to Vercel as a static site with **Root Directory
+   set to the repository root** (not `frontend/`). The frontend fetches
+   `../demo/proposals.json` at runtime for its example-proposal chips, so
+   `demo/` needs to be served alongside `frontend/` — deploying only the
+   `frontend` subfolder will 404 on that fetch (it falls back to two
+   hardcoded chips in that case, so the page still works, just with fewer
+   examples).
+4. Open `<your-deployment>/frontend/index.html`, paste a governance
+   proposal, submit — the contract returns a structured multi-scenario
+   simulation report.
+
+## Demo
+
+See `demo/proposals.json` for example proposals (treasury, quorum, validator
+rewards, fees, emission) and `demo/demo.py` to run them all against a deployed
+contract in one command.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
