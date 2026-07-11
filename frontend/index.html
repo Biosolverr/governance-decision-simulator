@@ -250,12 +250,16 @@
 const CONTRACT_ADDRESS = "0x8c47cF1337b2BE6B90cB3A44A580878AA25d0d5A";
 const RPC_URL = "https://studio.genlayer.com/api";
 
-const DEMO_PROPOSALS = [
+// Demo proposal chips are loaded from demo/proposals.json at runtime,
+// so the single source of truth for example proposals lives in one file
+// rather than being duplicated inside this script. If the fetch fails
+// (e.g. this page was opened directly as a local file:// path instead of
+// being served, or the repo layout was changed), a small hardcoded
+// fallback keeps the demo chips from silently disappearing.
+const PROPOSALS_JSON_PATH = "../demo/proposals.json";
+const FALLBACK_DEMO_PROPOSALS = [
   "Increase validator rewards from 5% to 8%.",
   "Lower the quorum requirement for governance votes from 20% to 12% of staked tokens.",
-  "Fund the grant program with an additional $50,000 USDC to support new ecosystem projects.",
-  "Reduce the protocol trading fee by 0.5% to remain competitive with other DEXs.",
-  "Increase the annual token emission rate by 15% to fund liquidity mining incentives.",
 ];
 
 const statusLine = document.getElementById("status-line");
@@ -273,18 +277,37 @@ function setStatus(text, isError = false) {
   statusLine.classList.toggle("err", isError);
 }
 
-// Render the demo-proposal chips.
-DEMO_PROPOSALS.forEach((text) => {
-  const chip = document.createElement("span");
-  chip.className = "chip";
-  chip.textContent = text.length > 46 ? text.slice(0, 46) + "…" : text;
-  chip.title = text;
-  chip.addEventListener("click", () => { textarea.value = text; });
-  chipsEl.appendChild(chip);
-});
+function renderDemoChips(proposalTexts) {
+  chipsEl.innerHTML = "";
+  proposalTexts.forEach((text) => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = text.length > 46 ? text.slice(0, 46) + "…" : text;
+    chip.title = text;
+    chip.addEventListener("click", () => { textarea.value = text; });
+    chipsEl.appendChild(chip);
+  });
+}
+
+async function loadDemoProposals() {
+  try {
+    const res = await fetch(PROPOSALS_JSON_PATH);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const texts = (data.proposals || []).map((p) => p.text).filter(Boolean);
+    if (texts.length === 0) throw new Error("proposals.json had no usable entries");
+    renderDemoChips(texts);
+  } catch (err) {
+    console.warn("Could not load demo/proposals.json, using fallback chips:", err);
+    renderDemoChips(FALLBACK_DEMO_PROPOSALS);
+  }
+}
+
+loadDemoProposals();
 
 let client = null;
 let account = null;
+let TransactionStatus = null;
 
 async function initClient() {
   setStatus("Creating ephemeral account…");
@@ -296,6 +319,9 @@ async function initClient() {
     const { studionet } = await import(
       "https://esm.sh/genlayer-js@latest/chains"
     );
+    ({ TransactionStatus } = await import(
+      "https://esm.sh/genlayer-js@latest/types"
+    ));
 
     account = createAccount();
     client = createClient({ chain: studionet, endpoint: RPC_URL, account });
@@ -461,8 +487,22 @@ async function runSimulation() {
       args: [text],
     });
 
-    setStatus(`Waiting for consensus… (tx ${txHash.slice(0, 10)}…)`);
-    const receipt = await client.waitForTransactionReceipt({ hash: txHash });
+    setStatus(
+      `Waiting for validator consensus… this can take 1-3+ minutes ` +
+      `(tx ${txHash.slice(0, 10)}…)`
+    );
+    // IMPORTANT: waitForTransactionReceipt needs an explicit status +
+    // generous retries/interval, or it times out on the SDK's short
+    // default long before nondet LLM validator consensus actually
+    // finishes (observed: "Timed out ... current status: 3" — the
+    // transaction was still progressing through consensus, not stuck).
+    // retries * interval = max wait time; 100 * 5000ms = ~8 minutes.
+    const receipt = await client.waitForTransactionReceipt({
+      hash: txHash,
+      status: TransactionStatus.ACCEPTED,
+      retries: 100,
+      interval: 5000,
+    });
 
     const raw = receipt.result ?? receipt.data ?? receipt.returnValue;
     const report = typeof raw === "string" ? JSON.parse(raw) : raw;
