@@ -250,12 +250,18 @@
 const CONTRACT_ADDRESS = "0x8c47cF1337b2BE6B90cB3A44A580878AA25d0d5A";
 const RPC_URL = "https://studio.genlayer.com/api";
 
-const DEMO_PROPOSALS = [
+// Demo proposal chips are loaded from proposals.json at runtime — a copy
+// of demo/proposals.json duplicated into this same frontend/ folder, so
+// the fetch works regardless of what Vercel's Root Directory is set to
+// (a relative "../demo/proposals.json" path only resolves correctly if
+// the whole repo is served with Root Directory = repo root; a same-folder
+// copy avoids depending on that deploy configuration).
+// If the fetch fails for any other reason, a small hardcoded fallback
+// keeps the demo chips from silently disappearing.
+const PROPOSALS_JSON_PATH = "./proposals.json";
+const FALLBACK_DEMO_PROPOSALS = [
   "Increase validator rewards from 5% to 8%.",
   "Lower the quorum requirement for governance votes from 20% to 12% of staked tokens.",
-  "Fund the grant program with an additional $50,000 USDC to support new ecosystem projects.",
-  "Reduce the protocol trading fee by 0.5% to remain competitive with other DEXs.",
-  "Increase the annual token emission rate by 15% to fund liquidity mining incentives.",
 ];
 
 const statusLine = document.getElementById("status-line");
@@ -273,15 +279,33 @@ function setStatus(text, isError = false) {
   statusLine.classList.toggle("err", isError);
 }
 
-// Render the demo-proposal chips.
-DEMO_PROPOSALS.forEach((text) => {
-  const chip = document.createElement("span");
-  chip.className = "chip";
-  chip.textContent = text.length > 46 ? text.slice(0, 46) + "…" : text;
-  chip.title = text;
-  chip.addEventListener("click", () => { textarea.value = text; });
-  chipsEl.appendChild(chip);
-});
+function renderDemoChips(proposalTexts) {
+  chipsEl.innerHTML = "";
+  proposalTexts.forEach((text) => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = text.length > 46 ? text.slice(0, 46) + "…" : text;
+    chip.title = text;
+    chip.addEventListener("click", () => { textarea.value = text; });
+    chipsEl.appendChild(chip);
+  });
+}
+
+async function loadDemoProposals() {
+  try {
+    const res = await fetch(PROPOSALS_JSON_PATH);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const texts = (data.proposals || []).map((p) => p.text).filter(Boolean);
+    if (texts.length === 0) throw new Error("proposals.json had no usable entries");
+    renderDemoChips(texts);
+  } catch (err) {
+    console.warn("Could not load proposals.json, using fallback chips:", err);
+    renderDemoChips(FALLBACK_DEMO_PROPOSALS);
+  }
+}
+
+loadDemoProposals();
 
 let client = null;
 let account = null;
