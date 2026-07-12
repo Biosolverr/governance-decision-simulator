@@ -394,6 +394,63 @@ async function waitForReceiptWithRetries(txHash, { maxWaitMs = 180000, retryDela
   throw lastErr || new Error(`Timed out waiting for transaction ${txHash} after ${maxWaitMs / 1000}s.`);
 }
 
+/**
+ * Extracts the contract's actual return value from a transaction receipt.
+ *
+ * CONFIRMED against a real Studio receipt (a person shared the full debug
+ * dump back after this exact issue): client.waitForTransactionReceipt()
+ * on this genlayer-js version returns the raw GenVM transaction record —
+ * the same shape Studio's own "Full Transaction Data" panel shows.
+ * Top-level `receipt.result` / `receipt.status` are small integer
+ * consensus-round codes (e.g. 5, 6), NOT the contract's return value.
+ * The real value is nested at:
+ *
+ *   receipt.consensus_data.leader_receipt[N].result.payload.readable
+ *
+ * where N is the leader_receipt entry with mode "leader" and
+ * result.status "return" (other entries are validators or idle/error
+ * rotations and don't carry the return value).
+ *
+ * That `readable` string is DOUBLE JSON-encoded: simulate_proposal
+ * returns a Python str containing JSON (json.dumps(report)), and GenVM's
+ * "readable" debug field represents that Python str value by JSON-encoding
+ * it once more so it round-trips unambiguously as a string. So it needs
+ * to be JSON.parse()'d twice: once to unwrap GenVM's encoding (yields the
+ * contract's returned string), once more to parse that string as the
+ * actual report object.
+ */
+function extractReportFromReceipt(receipt) {
+  const leaderReceipts = receipt?.consensus_data?.leader_receipt;
+  if (Array.isArray(leaderReceipts)) {
+    const leaderEntry = leaderReceipts.find(
+      (r) => r?.mode === "leader" && r?.result?.status === "return"
+    );
+    const payload = leaderEntry?.result?.payload?.readable;
+    if (typeof payload === "string") {
+      try {
+        let parsed = JSON.parse(payload);
+        if (typeof parsed === "string") parsed = JSON.parse(parsed);
+        if (parsed && typeof parsed === "object") return parsed;
+      } catch (err) {
+        console.warn("Failed to double-parse leader_receipt payload:", err);
+      }
+    }
+  }
+
+  // Fallback guesses for other genlayer-js versions that might normalize
+  // the receipt differently (unverified — kept only as a safety net).
+  const raw =
+    receipt?.result ?? receipt?.data ?? receipt?.returnValue ?? receipt?.output ?? receipt?.value;
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  return raw && typeof raw === "object" ? raw : null;
+}
+
 function drawCone(scenarios) {
   const g = document.getElementById("cone-branches");
   g.innerHTML = "";
@@ -543,17 +600,11 @@ async function runSimulation() {
     setStatus(`Waiting for consensus… (tx ${txHash.slice(0, 10)}…)`);
     const receipt = await waitForReceiptWithRetries(txHash);
 
-    // DEBUG: log the full receipt so we can see its real shape in the
-    // browser console — the exact field holding the contract's return
-    // value depends on the genlayer-js version, and the guess below
-    // (result / data / returnValue) has NOT been verified against a live
-    // SDK build. If simulations come back empty, open devtools (F12) and
-    // check what this logs.
+    // DEBUG: log the full receipt in case extraction still fails for some
+    // other reason — open devtools (F12) to inspect it if needed.
     console.log("Transaction receipt:", receipt);
 
-    const raw =
-      receipt.result ?? receipt.data ?? receipt.returnValue ?? receipt.output ?? receipt.value;
-    const report = typeof raw === "string" ? JSON.parse(raw) : raw;
+    const report = extractReportFromReceipt(receipt);
 
     // Sanity-check the shape before treating this as a real report — every
     // real simulate_proposal report has a `disclaimer` field. Without this
