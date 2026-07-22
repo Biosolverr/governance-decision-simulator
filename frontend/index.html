@@ -71,7 +71,20 @@
     text-align:center; margin-top:6px; letter-spacing:0.05em;
   }
 
-  /* ---------- control panel ---------- */
+  /* ---------- section dividers ---------- */
+  .section-divider{
+    display:flex; align-items:center; gap:14px;
+    margin:52px 0 -8px;
+  }
+  .section-divider .tag{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.14em; text-transform:uppercase;
+    color:var(--text-faint); white-space:nowrap;
+  }
+  .section-divider .tag.write{color:var(--gold);}
+  .section-divider .tag.read{color:var(--teal);}
+  .section-divider .rule{height:1px; background:var(--hair); flex:1;}
+
+  /* ---------- panel ---------- */
   .panel{
     background:var(--surface); border:1px solid var(--hair); border-radius:var(--radius);
     padding:28px; margin:36px 0;
@@ -94,7 +107,7 @@
     padding:6px 12px; cursor:pointer; transition:.15s ease;
   }
   .chip:hover{border-color:var(--gold-dim); color:var(--gold);}
-  .actions{display:flex; align-items:center; gap:14px; margin-top:20px;}
+  .actions{display:flex; align-items:center; gap:14px; margin-top:20px; flex-wrap:wrap;}
   button.primary{
     font-family:'Inter',sans-serif; font-weight:600; font-size:14px;
     background:var(--gold); color:#1a1508; border:none; border-radius:var(--radius);
@@ -102,12 +115,36 @@
   }
   button.primary:hover{background:#ddb52d;}
   button.primary:disabled{background:var(--hair); color:var(--text-faint); cursor:not-allowed;}
+  button.secondary{
+    font-family:'Inter',sans-serif; font-weight:500; font-size:13px;
+    background:transparent; color:var(--text); border:1px solid var(--hair); border-radius:var(--radius);
+    padding:10px 16px; cursor:pointer; transition:.15s ease;
+  }
+  button.secondary:hover{border-color:var(--gold-dim); color:var(--gold);}
+  button.secondary:disabled{color:var(--text-faint); cursor:not-allowed;}
   .status{font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--text-muted);}
   .status.err{color:var(--brick);}
+  .status.ok{color:var(--teal);}
   .account-line{
     font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-faint);
     margin-top:16px; word-break:break-all;
   }
+
+  /* ---------- form fields (used across write/read panels) ---------- */
+  .field-row{display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end;}
+  .field{display:flex; flex-direction:column; gap:6px; min-width:140px; flex:1;}
+  .field.narrow{flex:0 0 120px; min-width:100px;}
+  .field label{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:0.06em; text-transform:uppercase;
+    color:var(--text-faint);
+  }
+  .field input, .field select{
+    background:var(--ink); color:var(--text); border:1px solid var(--hair); border-radius:var(--radius);
+    padding:10px 12px; font-family:'Inter',sans-serif; font-size:14px; outline:none; transition:border-color .15s ease;
+  }
+  .field input:focus, .field select:focus{border-color:var(--gold-dim);}
+  .btn-row{display:flex; flex-wrap:wrap; gap:8px; margin-top:16px;}
+  .btn-row button.secondary{padding:9px 14px; font-size:12.5px;}
 
   /* ---------- results ---------- */
   #results{margin:44px 0 80px; display:none;}
@@ -163,6 +200,45 @@
   .consensus-col ul li{margin-bottom:5px;}
   .consensus-col .empty{color:var(--text-faint); font-size:12.5px; font-style:italic;}
 
+  /* ---------- generic raw / lookup output boxes ---------- */
+  .raw-box{
+    margin-top:16px; padding:14px; background:var(--ink); border:1px solid var(--hair);
+    border-radius:var(--radius); font-family:'IBM Plex Mono',monospace; font-size:11.5px;
+    color:var(--text-muted); white-space:pre-wrap; word-break:break-all; max-height:420px; overflow:auto;
+  }
+  .raw-box.md h2,.raw-box.md h3{font-family:'Fraunces',serif; color:var(--text); font-style:normal;}
+  .raw-box.md h2{font-size:16px; margin:0 0 10px;}
+  .raw-box.md h3{font-size:14.5px; margin:16px 0 6px;}
+  .raw-box.md blockquote{margin:0 0 10px; padding-left:10px; border-left:2px solid var(--hair); color:var(--text-muted); font-style:italic;}
+  .raw-box.md ul{margin:0 0 8px; padding-left:18px;}
+  .raw-box.md p{margin:0 0 8px;}
+
+  .kv-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-top:6px;}
+  .kv{background:var(--ink); border:1px solid var(--hair); border-radius:var(--radius); padding:14px 16px;}
+  .kv .k{font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-faint); margin-bottom:6px;}
+  .kv .v{font-family:'Fraunces',serif; font-size:20px; color:var(--text); word-break:break-all;}
+  .kv .v.small{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text-muted);}
+
+  .bar-list{margin-top:14px; display:flex; flex-direction:column; gap:10px;}
+  .bar-row{display:grid; grid-template-columns:110px 1fr 40px; align-items:center; gap:10px; font-size:12.5px;}
+  .bar-row .label{color:var(--text-muted); font-family:'IBM Plex Mono',monospace; font-size:11px;}
+  .bar-track{height:8px; background:var(--surface-raised); border-radius:100px; overflow:hidden;}
+  .bar-fill{height:100%; background:var(--gold);}
+  .bar-row .count{color:var(--text-faint); font-family:'IBM Plex Mono',monospace; font-size:11px; text-align:right;}
+
+  .list-rows{margin-top:14px; display:flex; flex-direction:column; gap:2px;}
+  .list-row{
+    background:var(--ink); border:1px solid var(--hair); border-radius:var(--radius);
+    padding:12px 14px; font-size:13px; color:var(--text-muted); cursor:pointer; transition:.15s ease;
+    display:flex; justify-content:space-between; gap:14px; align-items:baseline;
+  }
+  .list-row:hover{border-color:var(--gold-dim); color:var(--text);}
+  .list-row .rid{font-family:'IBM Plex Mono',monospace; color:var(--gold); font-size:11.5px; flex:0 0 auto;}
+  .list-row .rsummary{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .list-row .rtype{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--text-faint); flex:0 0 auto;}
+
+  .empty-note{color:var(--text-faint); font-size:13px; font-style:italic; margin-top:14px;}
+
   footer{border-top:1px solid var(--hair); padding:26px 0 60px; color:var(--text-faint); font-size:12px;}
   footer a{color:var(--text-muted);}
 </style>
@@ -197,17 +273,140 @@
     <p class="cone-caption">plausible futures radiate outward — none is the predicted outcome</p>
   </div>
 
+  <!-- =========================== WRITE METHODS =========================== -->
+  <div class="section-divider">
+    <span class="tag write">Write methods</span>
+    <span class="rule"></span>
+  </div>
+
   <div class="panel">
     <h2>Simulate a proposal</h2>
-    <p class="hint">Paste a governance proposal, or try one of the examples below.</p>
+    <p class="hint">Paste a governance proposal, or try one of the examples below. Add a source link if this proposal already lives on Snapshot, Tally, or an on-chain governor.</p>
     <textarea id="proposal-text" placeholder="e.g. Increase validator rewards from 5% to 8%.">Increase validator rewards from 5% to 8%.</textarea>
     <div class="chips" id="demo-chips"></div>
+    <div class="field-row" style="margin-top:16px;">
+      <div class="field">
+        <label for="source-reference">Source link (optional)</label>
+        <input type="text" id="source-reference" placeholder="https://snapshot.org/#/…/proposal/0x…" />
+      </div>
+    </div>
     <div class="actions">
       <button class="primary" id="submit-btn">Run simulation</button>
       <span class="status" id="status-line"></span>
     </div>
     <div class="account-line" id="account-line"></div>
-    <pre id="debug-receipt" style="display:none; margin-top:16px; padding:14px; background:var(--ink); border:1px solid var(--hair); border-radius:var(--radius); font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-muted); white-space:pre-wrap; word-break:break-all; max-height:300px; overflow:auto;"></pre>
+    <pre id="debug-receipt" class="raw-box" style="display:none;"></pre>
+  </div>
+
+  <div class="panel">
+    <h2>Re-run as a variant</h2>
+    <p class="hint">Take an already-simulated proposal and swap its percentage for a new value — e.g. re-run "increase by 8%" as "increase by 15%" without retyping the whole thing. Only works on proposals that contain a percentage.</p>
+    <div class="field-row">
+      <div class="field narrow">
+        <label for="variant-parent-id">Simulation ID</label>
+        <input type="number" id="variant-parent-id" min="0" step="1" placeholder="0" />
+      </div>
+      <div class="field narrow">
+        <label for="variant-new-percent">New %</label>
+        <input type="text" id="variant-new-percent" placeholder="15" />
+      </div>
+      <button class="primary" id="variant-btn">Run variant</button>
+    </div>
+    <span class="status" id="variant-status"></span>
+  </div>
+
+  <div class="panel">
+    <h2>Proposal length cap</h2>
+    <p class="hint">Owner-only. Raises or lowers how long a proposal_text can be before the contract rejects it. Calling this from any account other than the one that deployed the contract will fail — that's the contract enforcing ownership, not an error in the page.</p>
+    <div class="field-row">
+      <div class="field narrow">
+        <label for="new-max-length">New max (chars)</label>
+        <input type="number" id="new-max-length" min="1" step="1" placeholder="6000" />
+      </div>
+      <button class="secondary" id="set-max-btn">Update cap</button>
+    </div>
+    <span class="status" id="admin-status"></span>
+  </div>
+
+  <!-- =========================== READ METHODS =========================== -->
+  <div class="section-divider">
+    <span class="tag read">Read methods</span>
+    <span class="rule"></span>
+  </div>
+
+  <div class="panel">
+    <h2>Look up a simulation</h2>
+    <p class="hint">Enter a simulation ID and pull any of the views the contract keeps for it.</p>
+    <div class="field-row">
+      <div class="field narrow">
+        <label for="lookup-id">Simulation ID</label>
+        <input type="number" id="lookup-id" min="0" step="1" placeholder="0" />
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="secondary" data-lookup="report">Full report</button>
+      <button class="secondary" data-lookup="report_markdown">Markdown</button>
+      <button class="secondary" data-lookup="proposal">Original proposal</button>
+      <button class="secondary" data-lookup="source_reference">Source link</button>
+      <button class="secondary" data-lookup="variant_parent">Variant parent</button>
+      <button class="secondary" data-lookup="normalizer_diff">Normalizer diff</button>
+    </div>
+    <span class="status" id="lookup-status"></span>
+    <div id="lookup-output"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Registry overview</h2>
+    <p class="hint">The state of the whole simulation history — counts, ownership, and category trends.</p>
+    <div class="btn-row">
+      <button class="secondary" id="load-overview-btn">Load overview</button>
+    </div>
+    <div id="overview-output"></div>
+
+    <div style="margin-top:26px; padding-top:22px; border-top:1px solid var(--hair);">
+      <div class="field-row">
+        <div class="field">
+          <label for="recent-limit">Recent simulations — limit</label>
+          <input type="number" id="recent-limit" min="1" step="1" placeholder="5" value="5" />
+        </div>
+        <button class="secondary" id="load-recent-btn">Load</button>
+      </div>
+      <div id="recent-output"></div>
+    </div>
+
+    <div style="margin-top:26px; padding-top:22px; border-top:1px solid var(--hair);">
+      <div class="field-row">
+        <div class="field">
+          <label for="category-input">Category</label>
+          <input type="text" id="category-input" placeholder="treasury" />
+        </div>
+        <div class="field narrow">
+          <label for="similar-limit">Limit</label>
+          <input type="number" id="similar-limit" min="1" step="1" value="5" />
+        </div>
+        <button class="secondary" id="load-similar-btn">Find similar</button>
+        <button class="secondary" id="load-trend-btn">Confidence trend</button>
+      </div>
+      <div id="category-output"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Compare two simulations</h2>
+    <p class="hint">See where two reports agree on category, where their confidence differs, and which scenario titles are unique to each.</p>
+    <div class="field-row">
+      <div class="field narrow">
+        <label for="compare-id1">ID 1</label>
+        <input type="number" id="compare-id1" min="0" step="1" placeholder="0" />
+      </div>
+      <div class="field narrow">
+        <label for="compare-id2">ID 2</label>
+        <input type="number" id="compare-id2" min="0" step="1" placeholder="2" />
+      </div>
+      <button class="secondary" id="compare-btn">Compare</button>
+    </div>
+    <span class="status" id="compare-status"></span>
+    <div id="compare-output"></div>
   </div>
 
   <div id="results">
@@ -235,6 +434,10 @@
    Decentralized Fact Checker demo. No MetaMask, no wallet connect UI.
    This is intentional for a research PoC: every visitor gets a throwaway
    account good enough to call a public write method and read the result.
+   NOTE: an ephemeral account is never the contract owner, so the
+   "Proposal length cap" write will always fail with a UserError unless
+   you swap in the deployer's own account — that's expected, see the
+   panel copy above the button.
 
    IMPORTANT: the exact genlayer-js import path / client API shown below
    follows the pattern used in this project's prior GenLayer demos
@@ -242,12 +445,29 @@
    client.readContract). Pin this against whatever genlayer-js version you
    have installed/available at deploy time — SDK surfaces evolve, and this
    file intentionally has zero build step, so there's no lockfile pinning
-   the version for you. If the import below 404s, check the genlayer-js
-   docs for the current CDN path and client method names, and swap only
-   this import block + the two call sites marked below.
+   the version for you. If an import or method below 404s or throws
+   "not a function", check the genlayer-js docs for the current CDN path
+   and client method names, and swap only the import block + the call
+   sites marked below (writeContract / readContract / waitForTransactionReceipt).
+
+   READ-CALL SHAPE — unconfirmed in this environment: every write-method
+   receipt shape below (extractResultFromReceipt) was checked against a
+   real Studio transaction dump. client.readContract()'s return shape was
+   NOT separately confirmed the same way — view methods don't go through
+   consensus rounds/leader receipts the way writes do, so most SDK
+   versions return the decoded value directly (string/number/object)
+   rather than a receipt to unwrap. readMethod() below assumes that and
+   falls back to trying the receipt-unwrap logic only if the direct value
+   looks unusable. If every read button on the page errors identically,
+   that fallback path is the first thing to check against your installed
+   SDK version.
    ========================================================================= */
 
 // --- Fill this in after deploying contract/governance_simulator.py -------
+// NOTE: this contract was redeployed after a storage-init bug fix (see
+// docs/progress.md, DEPLOY-FIX). Re-check this address matches the
+// *current* deployment before using this page — an address from before
+// that fix will not have the corrected __init__ and may behave oddly.
 const CONTRACT_ADDRESS = "0x8c47cF1337b2BE6B90cB3A44A580878AA25d0d5A";
 const RPC_URL = "https://studio.genlayer.com/api";
 
@@ -269,15 +489,17 @@ const statusLine = document.getElementById("status-line");
 const accountLine = document.getElementById("account-line");
 const submitBtn = document.getElementById("submit-btn");
 const textarea = document.getElementById("proposal-text");
+const sourceReferenceInput = document.getElementById("source-reference");
 const chipsEl = document.getElementById("demo-chips");
 const resultsEl = document.getElementById("results");
 const metaRowEl = document.getElementById("meta-row");
 const scenarioGridEl = document.getElementById("scenario-grid");
 const consensusBlockEl = document.getElementById("consensus-block");
 
-function setStatus(text, isError = false) {
-  statusLine.textContent = text;
-  statusLine.classList.toggle("err", isError);
+function setStatus(el, text, kind) {
+  el.textContent = text;
+  el.classList.remove("err", "ok");
+  if (kind) el.classList.add(kind);
 }
 
 function renderDemoChips(proposalTexts) {
@@ -312,7 +534,7 @@ let client = null;
 let account = null;
 
 async function initClient() {
-  setStatus("Creating ephemeral account…");
+  setStatus(statusLine, "Creating ephemeral account…");
   try {
     // --- genlayer-js import (see note above if this path is stale) ------
     const { createClient, createAccount } = await import(
@@ -326,13 +548,10 @@ async function initClient() {
     client = createClient({ chain: studionet, endpoint: RPC_URL, account });
 
     accountLine.textContent = `Ephemeral account: ${account.address}`;
-    setStatus("Ready.");
+    setStatus(statusLine, "Ready.");
   } catch (err) {
     console.error(err);
-    setStatus(
-      "Could not load genlayer-js from CDN — check console and the SDK import note in source.",
-      true
-    );
+    setStatus(statusLine, "Could not load genlayer-js from CDN — check console and the SDK import note in source.", "err");
   }
 }
 
@@ -356,24 +575,26 @@ function confidenceOrder(level) {
   return { High: 0, Medium: 1, Low: 2, "Very Low": 3 }[level] ?? 1;
 }
 
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = String(str);
+  return div.innerHTML;
+}
+
 /**
  * Wraps client.waitForTransactionReceipt() in a retry loop.
  *
- * WHY: simulate_proposal is a nondet write — GenVM runs the LLM call
- * for the leader, then independently for each validator, and this can
- * take well over a minute if the network goes through more than one
- * leader rotation (observed directly during Studio testing, see
- * demo/proof.json). The SDK's own internal timeout for a single
- * waitForTransactionReceipt() call may be shorter than that, and its
- * exact default isn't something we could verify against a live SDK
- * build in this environment — so instead of guessing at timeout/retry
- * option names that might not exist on this SDK version, we just call
- * it again on a timeout. waitForTransactionReceipt is a read-only poll
- * (it doesn't resubmit the transaction), so retrying it is always safe.
- * Any error that ISN'T a timeout (e.g. the tx actually reverted) is
- * re-thrown immediately instead of being retried.
+ * WHY: every write method here that touches the LLM (simulate_proposal,
+ * simulate_proposal_with_reference, simulate_variant) is a nondet write —
+ * GenVM runs the LLM call for the leader, then independently for each
+ * validator, and this can take well over a minute if the network goes
+ * through more than one leader rotation (observed directly during Studio
+ * testing, see demo/proof.json). set_max_proposal_length is NOT nondet
+ * (no LLM call) and normally finalizes fast, but it's routed through the
+ * same helper for consistency — the retry loop is a no-op if the first
+ * poll already succeeds.
  */
-async function waitForReceiptWithRetries(txHash, { maxWaitMs = 180000, retryDelayMs = 4000 } = {}) {
+async function waitForReceiptWithRetries(txHash, { maxWaitMs = 180000, retryDelayMs = 4000, onWaiting } = {}) {
   const start = Date.now();
   let lastErr;
   while (Date.now() - start < maxWaitMs) {
@@ -384,10 +605,7 @@ async function waitForReceiptWithRetries(txHash, { maxWaitMs = 180000, retryDela
       if (!isTimeout) throw err;
       lastErr = err;
       const elapsedS = Math.round((Date.now() - start) / 1000);
-      setStatus(
-        `Still waiting for validator consensus… (${elapsedS}s elapsed, tx ${txHash.slice(0, 10)}…) ` +
-        `LLM-backed transactions can take a minute or more, especially if the leader rotates.`
-      );
+      if (onWaiting) onWaiting(elapsedS, txHash);
       await new Promise((r) => setTimeout(r, retryDelayMs));
     }
   }
@@ -395,31 +613,30 @@ async function waitForReceiptWithRetries(txHash, { maxWaitMs = 180000, retryDela
 }
 
 /**
- * Extracts the contract's actual return value from a transaction receipt.
+ * Extracts the contract's actual return value from a write-transaction
+ * receipt.
  *
- * CONFIRMED against a real Studio receipt (a person shared the full debug
- * dump back after this exact issue): client.waitForTransactionReceipt()
+ * CONFIRMED against a real Studio receipt: client.waitForTransactionReceipt()
  * on this genlayer-js version returns the raw GenVM transaction record —
  * the same shape Studio's own "Full Transaction Data" panel shows.
  * Top-level `receipt.result` / `receipt.status` are small integer
- * consensus-round codes (e.g. 5, 6), NOT the contract's return value.
- * The real value is nested at:
+ * consensus-round codes, NOT the contract's return value. The real value
+ * is nested at:
  *
  *   receipt.consensus_data.leader_receipt[N].result.payload.readable
  *
  * where N is the leader_receipt entry with mode "leader" and
- * result.status "return" (other entries are validators or idle/error
- * rotations and don't carry the return value).
+ * result.status "return".
  *
- * That `readable` string is DOUBLE JSON-encoded: simulate_proposal
- * returns a Python str containing JSON (json.dumps(report)), and GenVM's
- * "readable" debug field represents that Python str value by JSON-encoding
- * it once more so it round-trips unambiguously as a string. So it needs
- * to be JSON.parse()'d twice: once to unwrap GenVM's encoding (yields the
- * contract's returned string), once more to parse that string as the
- * actual report object.
+ * That `readable` value is DOUBLE JSON-encoded whenever the contract
+ * method returns a Python str (e.g. simulate_proposal's json.dumps
+ * report, or get_owner's address string): once to unwrap GenVM's own
+ * encoding, once more to parse that string as the actual value. Methods
+ * that return None (set_max_proposal_length) decode to null after a
+ * single unwrap and are returned as-is — no second parse is attempted on
+ * a non-string.
  */
-function extractReportFromReceipt(receipt) {
+function extractResultFromReceipt(receipt) {
   const leaderReceipts = receipt?.consensus_data?.leader_receipt;
   if (Array.isArray(leaderReceipts)) {
     const leaderEntry = leaderReceipts.find(
@@ -429,12 +646,20 @@ function extractReportFromReceipt(receipt) {
     if (typeof payload === "string") {
       try {
         let parsed = JSON.parse(payload);
-        if (typeof parsed === "string") parsed = JSON.parse(parsed);
-        if (parsed && typeof parsed === "object") return parsed;
+        if (typeof parsed === "string") {
+          try {
+            parsed = JSON.parse(parsed);
+          } catch {
+            // parsed was a plain string value (e.g. a markdown/report
+            // JSON string that itself isn't further-parseable) — keep it.
+          }
+        }
+        return parsed;
       } catch (err) {
-        console.warn("Failed to double-parse leader_receipt payload:", err);
+        console.warn("Failed to parse leader_receipt payload:", err);
       }
     }
+    if (payload === null || payload === undefined) return null;
   }
 
   // Fallback guesses for other genlayer-js versions that might normalize
@@ -445,10 +670,68 @@ function extractReportFromReceipt(receipt) {
     try {
       return JSON.parse(raw);
     } catch {
-      return null;
+      return raw;
     }
   }
-  return raw && typeof raw === "object" ? raw : null;
+  return raw ?? null;
+}
+
+/** Confirms a value looks like a real simulation report before rendering it. */
+function looksLikeReport(value) {
+  return value && typeof value === "object" && "disclaimer" in value;
+}
+
+function showDebugReceipt(receipt, message) {
+  const debugEl = document.getElementById("debug-receipt");
+  debugEl.style.display = "block";
+  debugEl.textContent =
+    (message ? message + "\n\n" : "") +
+    "DEBUG — full transaction receipt (copy this and send it back):\n\n" +
+    safeStringify(receipt);
+}
+
+/** Runs a write method end-to-end: submit, wait for consensus, unwrap result. */
+async function callWrite(functionName, args, { statusEl, waitingLabel } = {}) {
+  if (!client) throw new Error("Client not ready yet.");
+  setStatus(statusEl, "Submitting transaction…");
+  const txHash = await client.writeContract({ address: CONTRACT_ADDRESS, functionName, args });
+  setStatus(statusEl, `Waiting for consensus… (tx ${txHash.slice(0, 10)}…)`);
+  const receipt = await waitForReceiptWithRetries(txHash, {
+    onWaiting: (elapsedS) => {
+      setStatus(
+        statusEl,
+        `${waitingLabel || "Still waiting for validator consensus"}… (${elapsedS}s elapsed, tx ${txHash.slice(0, 10)}…)`
+      );
+    },
+  });
+  console.log(`[${functionName}] receipt:`, receipt);
+  return { receipt, result: extractResultFromReceipt(receipt) };
+}
+
+/**
+ * Runs a read (view) method. See the READ-CALL SHAPE note in the module
+ * docstring above — client.readContract's return shape wasn't separately
+ * confirmed in this environment, so this tries the direct value first
+ * and only falls back to receipt-style unwrapping if that looks wrong.
+ */
+async function callRead(functionName, args = []) {
+  if (!client) throw new Error("Client not ready yet.");
+  const raw = await client.readContract({ address: CONTRACT_ADDRESS, functionName, args });
+  if (raw && typeof raw === "object" && "consensus_data" in raw) {
+    return extractResultFromReceipt(raw);
+  }
+  return raw;
+}
+
+/** Parses a value that should be a JSON string but might already be decoded. */
+function parseMaybeJson(value, fallback) {
+  if (value === null || value === undefined || value === "") return fallback;
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
 }
 
 function drawCone(scenarios) {
@@ -493,14 +776,9 @@ function renderEffectList(label, items) {
     .join("")}</ul></div>`;
 }
 
-function escapeHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = String(str);
-  return div.innerHTML;
-}
-
 function renderReport(report) {
   metaRowEl.innerHTML = `
+    <span>Simulation ID: <b>${escapeHtml(report.simulation_id ?? "—")}</b></span>
     <span>Category: <b>${escapeHtml(report.detected_proposal_type || "unknown")}</b></span>
     <span>Time horizon: <b>${escapeHtml(report.simulation_time_horizon || "—")}</b></span>
     <span>Compound proposal: <b>${report.is_compound_proposal ? "yes" : "no"}</b></span>
@@ -573,74 +851,430 @@ function renderReport(report) {
 
   drawCone(scenarios);
   resultsEl.classList.add("visible");
+  resultsEl.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+/** Minimal, format-specific converter for get_report_markdown's fixed output shape. */
+function mdToHtml(md) {
+  const escaped = escapeHtml(md);
+  const lines = escaped.split("\n");
+  let html = "";
+  let inList = false;
+  const closeList = () => { if (inList) { html += "</ul>"; inList = false; } };
+  for (const line of lines) {
+    if (line.startsWith("### ")) { closeList(); html += `<h3>${line.slice(4)}</h3>`; continue; }
+    if (line.startsWith("## ")) { closeList(); html += `<h2>${line.slice(3)}</h2>`; continue; }
+    if (line.startsWith("&gt; ")) { closeList(); html += `<blockquote>${line.slice(5)}</blockquote>`; continue; }
+    if (line.startsWith("- ")) {
+      if (!inList) { html += "<ul>"; inList = true; }
+      html += `<li>${line.slice(2)}</li>`;
+      continue;
+    }
+    closeList();
+    if (line.trim() === "") continue;
+    html += `<p>${line}</p>`;
+  }
+  closeList();
+  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/_(.+?)_/g, "<em>$1</em>");
+  return html;
+}
+
+/* ------------------------------------------------------------------- */
+/* Simulate a proposal (simulate_proposal / simulate_proposal_with_reference) */
+/* ------------------------------------------------------------------- */
 
 async function runSimulation() {
   const text = textarea.value.trim();
+  const sourceReference = sourceReferenceInput.value.trim();
   if (!text) {
-    setStatus("Enter a proposal first.", true);
+    setStatus(statusLine, "Enter a proposal first.", "err");
     return;
   }
-  if (!client) {
-    setStatus("Client not ready yet — see status above.", true);
-    return;
-  }
-
   submitBtn.disabled = true;
-  setStatus("Submitting transaction…");
-
   try {
-    // --- contract call (see SDK import note above if method names differ)
-    const txHash = await client.writeContract({
-      address: CONTRACT_ADDRESS,
-      functionName: "simulate_proposal",
-      args: [text],
+    const functionName = sourceReference ? "simulate_proposal_with_reference" : "simulate_proposal";
+    const args = sourceReference ? [text, sourceReference] : [text];
+    const { receipt, result } = await callWrite(functionName, args, {
+      statusEl: statusLine,
+      waitingLabel: "Waiting for validator consensus",
     });
 
-    setStatus(`Waiting for consensus… (tx ${txHash.slice(0, 10)}…)`);
-    const receipt = await waitForReceiptWithRetries(txHash);
-
-    // DEBUG: log the full receipt in case extraction still fails for some
-    // other reason — open devtools (F12) to inspect it if needed.
-    console.log("Transaction receipt:", receipt);
-
-    const report = extractReportFromReceipt(receipt);
-
-    // Sanity-check the shape before treating this as a real report — every
-    // real simulate_proposal report has a `disclaimer` field. Without this
-    // check, picking the wrong field off `receipt` above would silently
-    // render an empty-looking "success" (unknown category, 0 scenarios)
-    // instead of a clear error.
-    if (!report || typeof report !== "object" || !("disclaimer" in report)) {
-      console.error("Unexpected report shape — full receipt logged above.", report);
-
-      // Show the raw receipt directly on the page too — easier to copy
-      // than digging through devtools console for some people.
-      const debugEl = document.getElementById("debug-receipt");
-      debugEl.style.display = "block";
-      debugEl.textContent =
-        "DEBUG — full transaction receipt (copy this and send it back):\n\n" +
-        safeStringify(receipt);
-
+    if (!looksLikeReport(result)) {
+      console.error("Unexpected report shape — full receipt logged above.", result);
+      showDebugReceipt(
+        receipt,
+        "Got a response, but it doesn't look like a simulation report (missing expected fields)."
+      );
       throw new Error(
-        "Got a response, but it doesn't look like a simulation report " +
-        "(missing expected fields). The raw receipt is now printed below " +
-        "the form on this page — copy it and send it back so the field " +
-        "name used to extract the result can be corrected."
+        "Got a response, but it doesn't look like a simulation report. The raw receipt is printed below the form — copy it and send it back."
       );
     }
 
-    setStatus("Simulation complete.");
-    renderReport(report);
+    setStatus(statusLine, "Simulation complete.", "ok");
+    renderReport(result);
   } catch (err) {
     console.error(err);
-    setStatus(`Failed: ${err.message || err}`, true);
+    setStatus(statusLine, `Failed: ${err.message || err}`, "err");
   } finally {
     submitBtn.disabled = false;
   }
 }
 
 submitBtn.addEventListener("click", runSimulation);
+
+/* ------------------------------------------------------------------- */
+/* Re-run as a variant (simulate_variant)                               */
+/* ------------------------------------------------------------------- */
+
+const variantBtn = document.getElementById("variant-btn");
+const variantStatus = document.getElementById("variant-status");
+
+variantBtn.addEventListener("click", async () => {
+  const parentId = document.getElementById("variant-parent-id").value.trim();
+  const newPercent = document.getElementById("variant-new-percent").value.trim();
+  if (parentId === "" || newPercent === "") {
+    setStatus(variantStatus, "Enter both a simulation ID and a new percentage.", "err");
+    return;
+  }
+  variantBtn.disabled = true;
+  try {
+    const { receipt, result } = await callWrite(
+      "simulate_variant",
+      [Number(parentId), newPercent],
+      { statusEl: variantStatus, waitingLabel: "Waiting for validator consensus" }
+    );
+    if (!looksLikeReport(result)) {
+      showDebugReceipt(receipt, "Variant response didn't look like a report.");
+      throw new Error("Got a response, but it doesn't look like a simulation report. Raw receipt printed below the Simulate panel.");
+    }
+    setStatus(variantStatus, "Variant complete.", "ok");
+    renderReport(result);
+  } catch (err) {
+    console.error(err);
+    setStatus(variantStatus, `Failed: ${err.message || err}`, "err");
+  } finally {
+    variantBtn.disabled = false;
+  }
+});
+
+/* ------------------------------------------------------------------- */
+/* Admin: set_max_proposal_length                                       */
+/* ------------------------------------------------------------------- */
+
+const setMaxBtn = document.getElementById("set-max-btn");
+const adminStatus = document.getElementById("admin-status");
+
+setMaxBtn.addEventListener("click", async () => {
+  const newMax = document.getElementById("new-max-length").value.trim();
+  if (newMax === "" || Number(newMax) <= 0) {
+    setStatus(adminStatus, "Enter a positive number of characters.", "err");
+    return;
+  }
+  setMaxBtn.disabled = true;
+  try {
+    const { result } = await callWrite("set_max_proposal_length", [Number(newMax)], {
+      statusEl: adminStatus,
+      waitingLabel: "Waiting for consensus",
+    });
+    setStatus(adminStatus, `Cap updated (contract returned ${result === null ? "null, as expected" : safeStringify(result)}).`, "ok");
+  } catch (err) {
+    console.error(err);
+    setStatus(
+      adminStatus,
+      /UserError|owner/i.test(err.message || "")
+        ? "Rejected — this account is not the contract owner."
+        : `Failed: ${err.message || err}`,
+      "err"
+    );
+  } finally {
+    setMaxBtn.disabled = false;
+  }
+});
+
+/* ------------------------------------------------------------------- */
+/* Look up a simulation (get_report / get_report_markdown / get_proposal /
+   get_source_reference / get_variant_parent / get_normalizer_diff)     */
+/* ------------------------------------------------------------------- */
+
+const lookupIdInput = document.getElementById("lookup-id");
+const lookupStatus = document.getElementById("lookup-status");
+const lookupOutput = document.getElementById("lookup-output");
+
+document.querySelectorAll("[data-lookup]").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const idText = lookupIdInput.value.trim();
+    if (idText === "") {
+      setStatus(lookupStatus, "Enter a simulation ID first.", "err");
+      return;
+    }
+    const id = Number(idText);
+    const kind = btn.dataset.lookup;
+    setStatus(lookupStatus, "Loading…");
+    lookupOutput.innerHTML = "";
+    try {
+      if (kind === "report") {
+        const raw = await callRead("get_report", [id]);
+        const report = parseMaybeJson(raw, null);
+        if (!looksLikeReport(report)) {
+          if (report && report.error) throw new Error(report.error);
+          throw new Error("Unexpected shape for get_report — check console.");
+        }
+        setStatus(lookupStatus, "Loaded.", "ok");
+        renderReport(report);
+        return;
+      }
+      if (kind === "report_markdown") {
+        const raw = await callRead("get_report_markdown", [id]);
+        const md = typeof raw === "string" ? raw : safeStringify(raw);
+        lookupOutput.innerHTML = `<div class="raw-box md">${mdToHtml(md)}</div>`;
+        setStatus(lookupStatus, "Loaded.", "ok");
+        return;
+      }
+      if (kind === "proposal") {
+        const raw = await callRead("get_proposal", [id]);
+        const parsedMaybeError = parseMaybeJson(raw, null);
+        if (parsedMaybeError && parsedMaybeError.error) throw new Error(parsedMaybeError.error);
+        lookupOutput.innerHTML = `<div class="raw-box">${escapeHtml(raw)}</div>`;
+        setStatus(lookupStatus, "Loaded.", "ok");
+        return;
+      }
+      if (kind === "source_reference") {
+        const raw = await callRead("get_source_reference", [id]);
+        lookupOutput.innerHTML = raw
+          ? `<div class="raw-box">${escapeHtml(raw)}</div>`
+          : `<p class="empty-note">No source reference stored for this simulation (it wasn't created via simulate_proposal_with_reference).</p>`;
+        setStatus(lookupStatus, "Loaded.", "ok");
+        return;
+      }
+      if (kind === "variant_parent") {
+        const raw = await callRead("get_variant_parent", [id]);
+        lookupOutput.innerHTML = raw
+          ? `<div class="raw-box">Parent simulation ID: ${escapeHtml(raw)}</div>`
+          : `<p class="empty-note">Not a variant of anything — this simulation was submitted directly.</p>`;
+        setStatus(lookupStatus, "Loaded.", "ok");
+        return;
+      }
+      if (kind === "normalizer_diff") {
+        const raw = await callRead("get_normalizer_diff", [id]);
+        const diff = parseMaybeJson(raw, null);
+        if (!diff) throw new Error("Unexpected shape for get_normalizer_diff.");
+        lookupOutput.innerHTML = `
+          <div class="kv-grid">
+            <div class="kv"><div class="k">Raw scenarios</div><div class="v">${diff.raw_scenario_count}</div></div>
+            <div class="kv"><div class="k">Final scenarios</div><div class="v">${diff.final_scenario_count}</div></div>
+            <div class="kv"><div class="k">Merged / dropped</div><div class="v">${diff.scenarios_merged_or_dropped}</div></div>
+          </div>
+          <div class="raw-box">Raw titles: ${(diff.raw_titles || []).map(escapeHtml).join(", ") || "—"}\n\nFinal titles: ${(diff.final_titles || []).map(escapeHtml).join(", ") || "—"}</div>
+        `;
+        setStatus(lookupStatus, "Loaded.", "ok");
+        return;
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus(lookupStatus, `Failed: ${err.message || err}`, "err");
+    }
+  });
+});
+
+/* ------------------------------------------------------------------- */
+/* Registry overview (get_simulations_count / get_owner /
+   get_max_proposal_length / get_category_stats / list_recent_simulations /
+   find_similar_simulations / get_confidence_trend)                    */
+/* ------------------------------------------------------------------- */
+
+document.getElementById("load-overview-btn").addEventListener("click", async () => {
+  const el = document.getElementById("overview-output");
+  el.innerHTML = "";
+  try {
+    const [count, owner, maxLen, statsRaw] = await Promise.all([
+      callRead("get_simulations_count", []),
+      callRead("get_owner", []),
+      callRead("get_max_proposal_length", []),
+      callRead("get_category_stats", []),
+    ]);
+    const stats = parseMaybeJson(statsRaw, {});
+    const maxCount = Math.max(1, ...Object.values(stats));
+
+    el.innerHTML = `
+      <div class="kv-grid">
+        <div class="kv"><div class="k">Total simulations</div><div class="v">${Number(count)}</div></div>
+        <div class="kv"><div class="k">Max proposal length</div><div class="v">${Number(maxLen)}</div></div>
+        <div class="kv"><div class="k">Owner</div><div class="v small">${escapeHtml(owner)}</div></div>
+      </div>
+      <div class="bar-list">
+        ${
+          Object.keys(stats).length
+            ? Object.entries(stats)
+                .sort((a, b) => b[1] - a[1])
+                .map(
+                  ([cat, n]) => `
+              <div class="bar-row">
+                <div class="label">${escapeHtml(cat)}</div>
+                <div class="bar-track"><div class="bar-fill" style="width:${(n / maxCount) * 100}%"></div></div>
+                <div class="count">${n}</div>
+              </div>`
+                )
+                .join("")
+            : `<p class="empty-note">No simulations yet.</p>`
+        }
+      </div>
+    `;
+  } catch (err) {
+    console.error(err);
+    el.innerHTML = `<p class="status err">Failed: ${escapeHtml(err.message || err)}</p>`;
+  }
+});
+
+document.getElementById("load-recent-btn").addEventListener("click", async () => {
+  const limit = Number(document.getElementById("recent-limit").value.trim() || "5");
+  const el = document.getElementById("recent-output");
+  el.innerHTML = "";
+  try {
+    const raw = await callRead("list_recent_simulations", [limit]);
+    const list = parseMaybeJson(raw, []);
+    el.innerHTML = list.length
+      ? `<div class="list-rows">${list
+          .map(
+            (item) => `
+        <div class="list-row" data-id="${item.id}">
+          <span class="rid">#${item.id}</span>
+          <span class="rsummary">${escapeHtml(item.proposal_summary)}</span>
+          <span class="rtype">${escapeHtml(item.detected_proposal_type)}</span>
+        </div>`
+          )
+          .join("")}</div>`
+      : `<p class="empty-note">No simulations yet.</p>`;
+    el.querySelectorAll(".list-row").forEach((row) => {
+      row.addEventListener("click", () => {
+        lookupIdInput.value = row.dataset.id;
+        lookupIdInput.scrollIntoView({ behavior: "smooth", block: "center" });
+        document.querySelector('[data-lookup="report"]').click();
+      });
+    });
+  } catch (err) {
+    console.error(err);
+    el.innerHTML = `<p class="status err">Failed: ${escapeHtml(err.message || err)}</p>`;
+  }
+});
+
+document.getElementById("load-similar-btn").addEventListener("click", async () => {
+  const category = document.getElementById("category-input").value.trim();
+  const limit = Number(document.getElementById("similar-limit").value.trim() || "5");
+  const el = document.getElementById("category-output");
+  if (!category) { el.innerHTML = `<p class="status err">Enter a category first.</p>`; return; }
+  el.innerHTML = "";
+  try {
+    const raw = await callRead("find_similar_simulations", [category, limit]);
+    const list = parseMaybeJson(raw, []);
+    el.innerHTML = list.length
+      ? `<div class="list-rows">${list
+          .map(
+            (item) => `
+        <div class="list-row" data-id="${item.id}">
+          <span class="rid">#${item.id}</span>
+          <span class="rsummary">${escapeHtml(item.proposal_summary)}</span>
+          <span class="rtype">${item.scenario_count} scenarios</span>
+        </div>`
+          )
+          .join("")}</div>`
+      : `<p class="empty-note">No simulations found in category "${escapeHtml(category)}".</p>`;
+    el.querySelectorAll(".list-row").forEach((row) => {
+      row.addEventListener("click", () => {
+        lookupIdInput.value = row.dataset.id;
+        lookupIdInput.scrollIntoView({ behavior: "smooth", block: "center" });
+        document.querySelector('[data-lookup="report"]').click();
+      });
+    });
+  } catch (err) {
+    console.error(err);
+    el.innerHTML = `<p class="status err">Failed: ${escapeHtml(err.message || err)}</p>`;
+  }
+});
+
+document.getElementById("load-trend-btn").addEventListener("click", async () => {
+  const category = document.getElementById("category-input").value.trim();
+  const el = document.getElementById("category-output");
+  if (!category) { el.innerHTML = `<p class="status err">Enter a category first.</p>`; return; }
+  el.innerHTML = "";
+  try {
+    const raw = await callRead("get_confidence_trend", [category]);
+    const trend = parseMaybeJson(raw, {});
+    const levels = ["High", "Medium", "Low", "Very Low"];
+    const maxCount = Math.max(1, ...levels.map((l) => trend[l] || 0));
+    el.innerHTML = `
+      <div class="bar-list">
+        ${levels
+          .map(
+            (level) => `
+          <div class="bar-row">
+            <div class="label">${level}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:${((trend[level] || 0) / maxCount) * 100}%"></div></div>
+            <div class="count">${trend[level] || 0}</div>
+          </div>`
+          )
+          .join("")}
+      </div>
+    `;
+  } catch (err) {
+    console.error(err);
+    el.innerHTML = `<p class="status err">Failed: ${escapeHtml(err.message || err)}</p>`;
+  }
+});
+
+/* ------------------------------------------------------------------- */
+/* Compare two simulations (compare_simulations)                        */
+/* ------------------------------------------------------------------- */
+
+document.getElementById("compare-btn").addEventListener("click", async () => {
+  const id1 = document.getElementById("compare-id1").value.trim();
+  const id2 = document.getElementById("compare-id2").value.trim();
+  const statusEl = document.getElementById("compare-status");
+  const el = document.getElementById("compare-output");
+  if (id1 === "" || id2 === "") {
+    setStatus(statusEl, "Enter both simulation IDs.", "err");
+    return;
+  }
+  setStatus(statusEl, "Comparing…");
+  el.innerHTML = "";
+  try {
+    const raw = await callRead("compare_simulations", [Number(id1), Number(id2)]);
+    const diff = parseMaybeJson(raw, null);
+    if (!diff) throw new Error("Unexpected shape for compare_simulations.");
+    if (diff.error) throw new Error(diff.error);
+
+    const dist = (d) =>
+      Object.entries(d || {})
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(" · ");
+
+    el.innerHTML = `
+      <div class="kv-grid">
+        <div class="kv"><div class="k">Same category</div><div class="v small">${diff.same_category ? "yes" : "no"} (${escapeHtml(diff.category_1)} / ${escapeHtml(diff.category_2)})</div></div>
+        <div class="kv"><div class="k">Confidence — #${diff.id1}</div><div class="v small">${dist(diff.confidence_distribution_1)}</div></div>
+        <div class="kv"><div class="k">Confidence — #${diff.id2}</div><div class="v small">${dist(diff.confidence_distribution_2)}</div></div>
+      </div>
+      <div class="consensus-cols" style="margin-top:18px;">
+        <div class="consensus-col">
+          <div class="label">Only in #${diff.id1}</div>
+          ${diff.scenario_titles_only_in_1?.length ? `<ul>${diff.scenario_titles_only_in_1.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>` : `<div class="empty">none</div>`}
+        </div>
+        <div class="consensus-col">
+          <div class="label">Only in #${diff.id2}</div>
+          ${diff.scenario_titles_only_in_2?.length ? `<ul>${diff.scenario_titles_only_in_2.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>` : `<div class="empty">none</div>`}
+        </div>
+        <div class="consensus-col">
+          <div class="label">Shared titles</div>
+          ${diff.scenario_titles_shared?.length ? `<ul>${diff.scenario_titles_shared.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>` : `<div class="empty">none</div>`}
+        </div>
+      </div>
+    `;
+    setStatus(statusEl, "Loaded.", "ok");
+  } catch (err) {
+    console.error(err);
+    setStatus(statusEl, `Failed: ${err.message || err}`, "err");
+  }
+});
+
 initClient();
 </script>
 </body>
