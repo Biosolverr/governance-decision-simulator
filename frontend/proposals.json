@@ -40,7 +40,7 @@
       "title": "Increase treasury spending for grants",
       "text": "Proposal to increase treasury spending by 8% to fund additional grants over the next two quarters.",
       "expected_category": "treasury",
-      "notes": "Used in the deployed contract's own test run (simulation id 0). Exercises the treasury prompt focus and simulate_variant, since it contains a plain percentage."
+      "notes": "Exercises the treasury prompt focus and simulate_variant, since it contains a plain percentage. Also the category wired up for on-chain context grounding: with set_onchain_context_enabled(true) and a configured set_treasury_data_source URL, simulating this proposal will fetch real treasury_balance_usd, monthly_spend_usd, and runway_months and ground the scenarios in those numbers instead of pure assumption."
     },
     {
       "id": "voting-threshold-change",
