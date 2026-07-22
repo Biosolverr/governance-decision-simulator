@@ -328,6 +328,29 @@
     <span class="status" id="admin-status"></span>
   </div>
 
+  <div class="panel">
+    <h2>On-chain context grounding</h2>
+    <p class="hint">Owner-only. Proof of concept, treasury category only. When enabled with a data source configured, simulate_proposal fetches real current treasury data (independently, by every validator) and grounds the LLM's reasoning in it instead of pure assumption. Disabled by default — both calls fail with a UserError unless you use the account that deployed the contract.</p>
+    <div class="field-row">
+      <div class="field narrow">
+        <label for="onchain-enabled-select">Enabled</label>
+        <select id="onchain-enabled-select">
+          <option value="true">true</option>
+          <option value="false">false</option>
+        </select>
+      </div>
+      <button class="secondary" id="set-onchain-enabled-btn">Update</button>
+    </div>
+    <div class="field-row" style="margin-top:14px;">
+      <div class="field">
+        <label for="treasury-data-source-url">Treasury data source URL</label>
+        <input type="text" id="treasury-data-source-url" placeholder="https://raw.githubusercontent.com/.../treasury-snapshot.json" />
+      </div>
+      <button class="secondary" id="set-treasury-source-btn">Update</button>
+    </div>
+    <span class="status" id="onchain-admin-status"></span>
+  </div>
+
   <!-- =========================== READ METHODS =========================== -->
   <div class="section-divider">
     <span class="tag read">Read methods</span>
@@ -350,6 +373,7 @@
       <button class="secondary" data-lookup="source_reference">Source link</button>
       <button class="secondary" data-lookup="variant_parent">Variant parent</button>
       <button class="secondary" data-lookup="normalizer_diff">Normalizer diff</button>
+      <button class="secondary" data-lookup="onchain_context">On-chain context</button>
     </div>
     <span class="status" id="lookup-status"></span>
     <div id="lookup-output"></div>
@@ -357,11 +381,12 @@
 
   <div class="panel">
     <h2>Registry overview</h2>
-    <p class="hint">The state of the whole simulation history — counts, ownership, and category trends.</p>
+    <p class="hint">The state of the whole simulation history — counts, ownership, category trends, and on-chain context configuration.</p>
     <div class="btn-row">
       <button class="secondary" id="load-overview-btn">Load overview</button>
     </div>
     <div id="overview-output"></div>
+
 
     <div style="margin-top:26px; padding-top:22px; border-top:1px solid var(--hair);">
       <div class="field-row">
@@ -468,7 +493,7 @@
 // docs/progress.md, DEPLOY-FIX). Re-check this address matches the
 // *current* deployment before using this page — an address from before
 // that fix will not have the corrected __init__ and may behave oddly.
-const CONTRACT_ADDRESS = "0x8c47cF1337b2BE6B90cB3A44A580878AA25d0d5A";
+const CONTRACT_ADDRESS = "0x698Fd7107f5dDBf3aA255277512f94DbF5d5a919";
 const RPC_URL = "https://studio.genlayer.com/api";
 
 // Demo proposal chips are loaded from proposals.json at runtime — a copy
@@ -783,6 +808,7 @@ function renderReport(report) {
     <span>Time horizon: <b>${escapeHtml(report.simulation_time_horizon || "—")}</b></span>
     <span>Compound proposal: <b>${report.is_compound_proposal ? "yes" : "no"}</b></span>
     <span>Scenarios: <b>${(report.generated_scenarios || []).length}</b></span>
+    <span>On-chain grounding: <b>${report.onchain_context_used ? "yes" : "no"}</b></span>
   `;
 
   const scenarios = (report.generated_scenarios || [])
@@ -992,6 +1018,60 @@ setMaxBtn.addEventListener("click", async () => {
 });
 
 /* ------------------------------------------------------------------- */
+/* Admin: set_onchain_context_enabled / set_treasury_data_source         */
+/* ------------------------------------------------------------------- */
+
+const onchainAdminStatus = document.getElementById("onchain-admin-status");
+
+document.getElementById("set-onchain-enabled-btn").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const enabled = document.getElementById("onchain-enabled-select").value === "true";
+  btn.disabled = true;
+  try {
+    const { result } = await callWrite("set_onchain_context_enabled", [enabled], {
+      statusEl: onchainAdminStatus,
+      waitingLabel: "Waiting for consensus",
+    });
+    setStatus(onchainAdminStatus, `On-chain context ${enabled ? "enabled" : "disabled"} (contract returned ${result === null ? "null, as expected" : safeStringify(result)}).`, "ok");
+  } catch (err) {
+    console.error(err);
+    setStatus(
+      onchainAdminStatus,
+      /UserError|owner/i.test(err.message || "")
+        ? "Rejected — this account is not the contract owner."
+        : `Failed: ${err.message || err}`,
+      "err"
+    );
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("set-treasury-source-btn").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const url = document.getElementById("treasury-data-source-url").value.trim();
+  btn.disabled = true;
+  try {
+    const { result } = await callWrite("set_treasury_data_source", [url], {
+      statusEl: onchainAdminStatus,
+      waitingLabel: "Waiting for consensus",
+    });
+    setStatus(onchainAdminStatus, `Data source updated (contract returned ${result === null ? "null, as expected" : safeStringify(result)}).`, "ok");
+  } catch (err) {
+    console.error(err);
+    setStatus(
+      onchainAdminStatus,
+      /UserError|owner/i.test(err.message || "")
+        ? "Rejected — this account is not the contract owner."
+        : `Failed: ${err.message || err}`,
+      "err"
+    );
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ------------------------------------------------------------------- */
 /* Look up a simulation (get_report / get_report_markdown / get_proposal /
    get_source_reference / get_variant_parent / get_normalizer_diff)     */
 /* ------------------------------------------------------------------- */
@@ -1069,6 +1149,32 @@ document.querySelectorAll("[data-lookup]").forEach((btn) => {
         setStatus(lookupStatus, "Loaded.", "ok");
         return;
       }
+      if (kind === "onchain_context") {
+        // get_onchain_context returns "" (empty string) whenever no
+        // on-chain context was fetched/used for this simulation — that's
+        // a valid, meaningful response, not a failure. We render an
+        // explicit note for it rather than leaving the box blank, since
+        // an empty string is easy to mistake for "nothing happened".
+        const raw = await callRead("get_onchain_context", [id]);
+        if (!raw) {
+          lookupOutput.innerHTML = `<p class="empty-note">No on-chain context was used for this simulation (the feature was disabled, the category is unsupported, or the fetch failed at the time).</p>`;
+        } else {
+          const context = parseMaybeJson(raw, null);
+          if (context && typeof context === "object") {
+            lookupOutput.innerHTML = `
+              <div class="kv-grid">
+                ${Object.entries(context)
+                  .map(([k, v]) => `<div class="kv"><div class="k">${escapeHtml(k)}</div><div class="v small">${escapeHtml(v)}</div></div>`)
+                  .join("")}
+              </div>
+            `;
+          } else {
+            lookupOutput.innerHTML = `<div class="raw-box">${escapeHtml(raw)}</div>`;
+          }
+        }
+        setStatus(lookupStatus, "Loaded.", "ok");
+        return;
+      }
     } catch (err) {
       console.error(err);
       setStatus(lookupStatus, `Failed: ${err.message || err}`, "err");
@@ -1086,20 +1192,23 @@ document.getElementById("load-overview-btn").addEventListener("click", async () 
   const el = document.getElementById("overview-output");
   el.innerHTML = "";
   try {
-    const [count, owner, maxLen, statsRaw] = await Promise.all([
+    const [count, owner, maxLen, statsRaw, onchainConfigRaw] = await Promise.all([
       callRead("get_simulations_count", []),
       callRead("get_owner", []),
       callRead("get_max_proposal_length", []),
       callRead("get_category_stats", []),
+      callRead("get_onchain_context_config", []),
     ]);
     const stats = parseMaybeJson(statsRaw, {});
     const maxCount = Math.max(1, ...Object.values(stats));
+    const onchainConfig = parseMaybeJson(onchainConfigRaw, { enabled: false, treasury_data_source_url: "" });
 
     el.innerHTML = `
       <div class="kv-grid">
         <div class="kv"><div class="k">Total simulations</div><div class="v">${Number(count)}</div></div>
         <div class="kv"><div class="k">Max proposal length</div><div class="v">${Number(maxLen)}</div></div>
         <div class="kv"><div class="k">Owner</div><div class="v small">${escapeHtml(owner)}</div></div>
+        <div class="kv"><div class="k">On-chain context</div><div class="v small">${onchainConfig.enabled ? "enabled" : "disabled"}${onchainConfig.treasury_data_source_url ? ` — ${escapeHtml(onchainConfig.treasury_data_source_url)}` : ""}</div></div>
       </div>
       <div class="bar-list">
         ${
