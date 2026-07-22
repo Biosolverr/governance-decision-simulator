@@ -124,6 +124,7 @@
   button.secondary:disabled{color:var(--text-faint); cursor:not-allowed;}
   .status{font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--text-muted);}
   .status.err{color:var(--brick);}
+  .status.warn{color:var(--gold);}
   .status.ok{color:var(--teal);}
   .account-line{
     font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-faint);
@@ -523,8 +524,23 @@ const consensusBlockEl = document.getElementById("consensus-block");
 
 function setStatus(el, text, kind) {
   el.textContent = text;
-  el.classList.remove("err", "ok");
+  el.classList.remove("err", "ok", "warn");
   if (kind) el.classList.add(kind);
+}
+
+/**
+ * Renders a caught write-error to a status element. A page-side timeout
+ * (waitForReceiptWithRetries giving up) is NOT the same thing as the
+ * transaction failing — the tx may still be committing on Studionet —
+ * so it gets neutral "warn" styling and its own wording instead of the
+ * same alarming "Failed:" red text a genuine error gets.
+ */
+function setWriteErrorStatus(statusEl, err) {
+  if (err?.isPageTimeout) {
+    setStatus(statusEl, err.message, "warn");
+  } else {
+    setStatus(statusEl, `Failed: ${err.message || err}`, "err");
+  }
 }
 
 function renderDemoChips(proposalTexts) {
@@ -612,14 +628,23 @@ function escapeHtml(str) {
  * WHY: every write method here that touches the LLM (simulate_proposal,
  * simulate_proposal_with_reference, simulate_variant) is a nondet write —
  * GenVM runs the LLM call for the leader, then independently for each
- * validator, and this can take well over a minute if the network goes
+ * validator, and this can take several minutes if the network goes
  * through more than one leader rotation (observed directly during Studio
- * testing, see demo/proof.json). set_max_proposal_length is NOT nondet
- * (no LLM call) and normally finalizes fast, but it's routed through the
- * same helper for consistency — the retry loop is a no-op if the first
- * poll already succeeds.
+ * testing — a single transaction has taken multiple PROPOSING /
+ * COMMITTING / REVEALING rounds before reaching ACCEPTED).
+ * set_max_proposal_length and the on-chain context admin methods are NOT
+ * nondet (no LLM call) and normally finalize fast, but they're routed
+ * through the same helper for consistency — the retry loop is a no-op if
+ * the first poll already succeeds.
+ *
+ * IMPORTANT: this page giving up after maxWaitMs does NOT mean the
+ * transaction failed. Studio's own transaction explorer can still show a
+ * transaction actively committing well after this page's timeout window.
+ * The two are independent: this is a client-side polling budget, not a
+ * verdict on the transaction. See the calmer messaging in callWrite's
+ * onWaiting callback and the timeout error text below.
  */
-async function waitForReceiptWithRetries(txHash, { maxWaitMs = 180000, retryDelayMs = 4000, onWaiting } = {}) {
+async function waitForReceiptWithRetries(txHash, { maxWaitMs = 420000, retryDelayMs = 5000, onWaiting } = {}) {
   const start = Date.now();
   let lastErr;
   while (Date.now() - start < maxWaitMs) {
@@ -634,7 +659,14 @@ async function waitForReceiptWithRetries(txHash, { maxWaitMs = 180000, retryDela
       await new Promise((r) => setTimeout(r, retryDelayMs));
     }
   }
-  throw lastErr || new Error(`Timed out waiting for transaction ${txHash} after ${maxWaitMs / 1000}s.`);
+  const elapsedMin = Math.round(maxWaitMs / 60000);
+  const err = new Error(
+    `This page stopped waiting after ~${elapsedMin} minutes, but tx ${txHash} may still be committing — ` +
+    `check it directly in Studio's transaction explorer or call get_simulations_count before resubmitting.`
+  );
+  err.isPageTimeout = true;
+  err.txHash = txHash;
+  throw lastErr && !/timed out|timeout/i.test(lastErr.message || "") ? lastErr : err;
 }
 
 /**
@@ -715,17 +747,28 @@ function showDebugReceipt(receipt, message) {
     safeStringify(receipt);
 }
 
+/** Formats elapsed seconds as e.g. "1m 24s" for calmer, more readable waiting status. */
+function formatElapsed(elapsedS) {
+  const m = Math.floor(elapsedS / 60);
+  const s = elapsedS % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
 /** Runs a write method end-to-end: submit, wait for consensus, unwrap result. */
 async function callWrite(functionName, args, { statusEl, waitingLabel } = {}) {
   if (!client) throw new Error("Client not ready yet.");
   setStatus(statusEl, "Submitting transaction…");
   const txHash = await client.writeContract({ address: CONTRACT_ADDRESS, functionName, args });
-  setStatus(statusEl, `Waiting for consensus… (tx ${txHash.slice(0, 10)}…)`);
+  setStatus(statusEl, `Submitted. Waiting for validator consensus… (tx ${txHash.slice(0, 10)}…)`);
   const receipt = await waitForReceiptWithRetries(txHash, {
     onWaiting: (elapsedS) => {
+      // Past ~90s this is routine for an LLM-backed write, not a sign of
+      // trouble — GenVM may be going through more than one leader
+      // rotation. The status stays informative rather than alarming.
+      const note = elapsedS > 90 ? " — this is normal for LLM-backed writes, especially with a leader rotation" : "";
       setStatus(
         statusEl,
-        `${waitingLabel || "Still waiting for validator consensus"}… (${elapsedS}s elapsed, tx ${txHash.slice(0, 10)}…)`
+        `${waitingLabel || "Still waiting for validator consensus"}${note} (${formatElapsed(elapsedS)} elapsed, tx ${txHash.slice(0, 10)}…)`
       );
     },
   });
@@ -940,7 +983,7 @@ async function runSimulation() {
     renderReport(result);
   } catch (err) {
     console.error(err);
-    setStatus(statusLine, `Failed: ${err.message || err}`, "err");
+    setWriteErrorStatus(statusLine, err);
   } finally {
     submitBtn.disabled = false;
   }
@@ -977,7 +1020,7 @@ variantBtn.addEventListener("click", async () => {
     renderReport(result);
   } catch (err) {
     console.error(err);
-    setStatus(variantStatus, `Failed: ${err.message || err}`, "err");
+    setWriteErrorStatus(variantStatus, err);
   } finally {
     variantBtn.disabled = false;
   }
