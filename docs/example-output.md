@@ -1,16 +1,14 @@
 # Example output
 
-Note: this is a synthetic example. The deterministic pipeline stages
+## Synthetic pipeline-shape example
+
+This first example is synthetic. The deterministic pipeline stages
 (Parser, Classifier, Normalizer, Risk & Assumption Engine, Consensus
 Layer, Report Builder) ran for real locally, but the LLM step itself was
 stubbed with a hand written fake scenario set, since this was produced
 before the contract was deployed to GenLayer Studio. It shows the exact
-output shape, not a real model response.
-
-For real, on chain LLM generated output, see `demo/proof.json` once fresh
-Studionet transactions have been run against the current contract version
-(the previous `demo/proof.json` was captured against an earlier revision
-and should be treated as outdated until it is regenerated).
+output shape, not a real model response. A real, live-captured example
+follows further down.
 
 This synthetic example uses the proposal from the project spec's own
 example.
@@ -26,6 +24,7 @@ Input: `"Increase validator rewards from 5% to 8%."`
   "detected_proposal_type": "validator_incentive",
   "is_compound_proposal": false,
   "simulation_time_horizon": "1-6 months",
+  "onchain_context_used": false,
   "generated_scenarios": [
     {
       "title": "Higher participation",
@@ -99,10 +98,11 @@ a recurring risk or assumption with each other. In a real LLM run across
 multiple validators, scenarios that genuinely converge on the same
 underlying risk (for example, multiple validators independently flagging
 "long-term sustainability decreases") would surface in
-`areas_of_agreement` instead.
+`areas_of_agreement` instead. In practice, real runs so far have still
+landed everything in `interesting_alternative_outcomes` too, see
+`docs/architecture.md`'s Known limitations section for why.
 
-Two fields on this report are new since the pipeline shape above was
-first documented:
+Fields worth calling out on this report shape:
 
 - `schema_version` marks the overall report shape. It stays at `1` as
   long as no field is renamed or removed; new fields can be added without
@@ -110,6 +110,62 @@ first documented:
 - `principle_version` records which version of the `_generate_scenarios`
   equivalence principle this specific simulation was accepted under. See
   `docs/architecture.md` for what changed between principle versions.
+- `onchain_context_used` is `true` only when the On-chain Context Fetcher
+  successfully grounded this specific simulation in real fetched data
+  (treasury category only, and only if the owner enabled the feature and
+  configured a data source). It is `false` here since this example
+  predates that feature entirely.
+
+## Real, live-captured example: on-chain context grounding
+
+Unlike the example above, this one is a real transaction accepted on
+GenLayer Studionet, with the on-chain context grounding feature (see
+`docs/architecture.md`) enabled and pointed at a public JSON snapshot
+serving:
+
+```json
+{"treasury_balance_usd": 4200000, "monthly_spend_usd": 175000, "runway_months": 24}
+```
+
+Input: `"Proposal to increase treasury spending by 10% to fund additional
+grants over the next two quarters."`
+
+Relevant excerpt of the accepted report (trimmed to the fields that show
+the grounding effect; full scenario objects also include
+`governance_effects`, `validator_effects`, `community_effects`,
+`protocol_effects`, and `risk_factors` per the schema above):
+
+```json
+{
+  "simulation_id": 1,
+  "detected_proposal_type": "treasury",
+  "onchain_context_used": true,
+  "generated_scenarios": [
+    {
+      "title": "Ecosystem Growth Outpaces Spend Increase",
+      "treasury_effects": [
+        "Monthly spend rises to ~$192,500 (10% increase)",
+        "Runway initially drops to ~21.8 months (4200000 / 192500)",
+        "New revenue streams add ~$50,000/month after 6 months, stabilizing runway at ~24 months"
+      ],
+      "confidence": "Medium"
+    }
+  ]
+}
+```
+
+The LLM computed `~$192,500` as 10% over the fetched `monthly_spend_usd`
+of `175000`, and `~21.8 months` as the fetched `treasury_balance_usd` of
+`4200000` divided by that new spend rate, both figures traceable directly
+to the on-chain context rather than invented. The Equivalence Principle
+output for the context-fetch step on this same transaction showed the
+identical JSON snapshot above, confirming the validator that produced it
+fetched the URL independently rather than copying the leader's value.
+
+`get_onchain_context(1)` returns exactly the snapshot JSON shown above;
+`get_onchain_context(0)` (a simulation made before the feature was
+enabled) returns an empty string, meaning no context was used for that
+run.
 
 ## Other ways to read a stored simulation
 
@@ -130,6 +186,11 @@ stored data, useful for a frontend or for manual inspection in Studio:
 - `get_confidence_trend(category)` and `get_category_stats()` give
   running totals across all simulations of a category, rather than a
   single simulation's detail.
+- `get_onchain_context(simulation_id)` returns the JSON context actually
+  used for that specific simulation (empty string if none was used),
+  distinct from `get_onchain_context_config()`, which returns the
+  contract-wide feature toggle and configured data source URL rather than
+  anything tied to one simulation.
 
 None of these change what `simulate_proposal` returns; they only offer
 different views onto data that is already stored on chain.
