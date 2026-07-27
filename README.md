@@ -1,194 +1,283 @@
 # AI Governance Decision Simulator
 
-A **GenLayer Intelligent Contract** that simulates the possible consequences
-of a DAO governance proposal before it's voted on.
+A **GenLayer Intelligent Contract** that simulates possible outcomes of DAO governance proposals before voting.
 
-> The contract does **not** approve, reject, score, or rank proposals.
-> It only generates multiple plausible future scenarios to support human
-> decision-making. Every report ends with an explicit disclaimer saying so.
+The contract does **not** approve, reject, score, rank, or recommend proposals. Its purpose is to generate multiple plausible future scenarios that help DAO participants understand potential consequences before making a governance decision. Every report includes an explicit disclaimer stating this.
 
-## Idea
+This project is a research demonstration and should not be considered a production governance system or a replacement for human decision making.
 
-Instead of asking *"Is this proposal good?"*, the contract asks:
+## Overview
 
-> "If this proposal is accepted, what could realistically happen over the
-> following months?"
+Instead of asking:
 
-It classifies the proposal into one of 10 categories, builds a
-category-specific prompt, runs it through GenLayer's nondeterministic LLM
-execution with validator consensus (`gl.eq_principle.prompt_comparative`),
-then deterministically normalizes, deduplicates, and structures the
-resulting scenarios into a JSON report (effects on treasury, governance,
-validators, community, and protocol; risk factors; confidence; a rough
-consensus summary).
+> "Should this proposal pass?"
 
-For the treasury category specifically, the contract can optionally
-ground its reasoning in real, current data instead of pure LLM assumption
-- see On-chain context grounding below.
+the contract asks:
 
-The contract exposes 6 write methods (`simulate_proposal`,
-`simulate_proposal_with_reference`, `simulate_variant`,
-`set_max_proposal_length`, `set_onchain_context_enabled`,
-`set_treasury_data_source`, the last three owner-only) and 16 read methods
-for browsing, comparing, and auditing stored simulations (`get_report`,
-`get_report_markdown`, `get_proposal`, `get_owner`,
-`get_max_proposal_length`, `get_onchain_context_config`,
-`get_onchain_context`, `get_category_stats`, `list_recent_simulations`,
-`find_similar_simulations`, `get_confidence_trend`,
-`get_source_reference`, `get_variant_parent`, `get_normalizer_diff`,
-`compare_simulations`, `get_simulations_count`). Written up in
-[`docs/architecture.md`](docs/architecture.md).
+> "If this proposal is accepted, what are several realistic outcomes over the coming months?"
 
-This is a research demo, not an audited or production-hardened contract.
+The contract:
 
-### Deploy note
+* classifies the proposal into one of several governance categories,
+* builds a category specific prompt,
+* performs nondeterministic LLM execution through GenLayer,
+* reaches validator consensus using `gl.eq_principle.prompt_comparative`,
+* deterministically normalizes and structures the accepted output,
+* stores the final report on-chain for future reference.
 
-An earlier version of the contract failed on deploy with:
+The generated report contains:
 
-```
-AssertionError: Is right the same storage type? `TreeMap` <- `TreeMap`
-```
+* proposal category,
+* multiple future scenarios,
+* treasury, governance, validator, community, and protocol effects,
+* identified risks,
+* confidence level,
+* consensus summary,
+* report metadata,
+* principle version used during consensus.
 
-This happened because `__init__` explicitly reassigned every `TreeMap`
-field with a bare `TreeMap()` call. GenVM storage starts zero-initialized
-at deploy time, so every `TreeMap`-typed field already exists as an empty
-instance of its own declared generic type before `__init__` ever runs;
-reassigning a bare, generic-less `TreeMap()` over it crashed every
-validator. The fix was simply to stop touching those fields in `__init__`
-and let GenVM's zero-initialization do its job. This matches every
-official GenLayer example: none of them assign `TreeMap()` in `__init__`
-for a `TreeMap`-typed field. No other contract logic changed.
+For treasury proposals, the contract can optionally use real financial data instead of relying entirely on LLM assumptions.
 
-### On-chain context grounding (proof of concept, treasury category only)
+---
 
-By default the LLM reasons purely from `proposal_text`, with no anchor in
-the DAO's actual current financial position. This optional module lets
-the owner configure a data source URL; when enabled, `simulate_proposal`
-fetches real `treasury_balance_usd`, `monthly_spend_usd`, and
-`runway_months` and tells the LLM to treat them as ground truth rather
-than inventing its own numbers.
+# Architecture
 
-The fetch itself is independent per validator (each one hits the URL on
-its own) and reconciled through its own `prompt_comparative` call with a
-numeric-tolerance equivalence principle (small drift between two live
-readings a few seconds apart is expected and tolerated; a missing field,
-non-numeric value, or drift beyond the tolerance is not). This has been
-tested live end-to-end: enabling the feature, pointing it at a public
-JSON snapshot, and confirming the LLM's scenarios computed directly off
-the fetched numbers (e.g. deriving a new runway from the fetched balance
-and spend rate) rather than guessing.
+The project consists of two components.
 
-Disabled by default (`onchain_context_enabled = False`, empty data source
-URL), so existing behavior and report shape are unaffected until the
-owner opts in via `set_onchain_context_enabled` and
-`set_treasury_data_source`. Currently wired up for the `treasury` category
-only; extending to another category is adding one entry to
-`_ONCHAIN_CONTEXT_FETCHERS` plus a category-specific parser in
-`contract/governance_simulator.py`, no pipeline changes needed.
+## Intelligent Contract
 
-## Repository structure
+The Intelligent Contract is responsible for:
+
+* proposal classification,
+* proposal simulation,
+* validator consensus,
+* deterministic report normalization,
+* report storage,
+* auditability of LLM output,
+* statistics aggregation,
+* proposal comparison,
+* simulation history.
+
+The contract keeps both the finalized report and selected metadata that make simulations easier to inspect and compare over time.
+
+## Frontend
+
+The frontend is a lightweight HTML, CSS, and JavaScript application with no build step.
+
+It communicates directly with the deployed Intelligent Contract and exposes every public contract method through a simple interface.
+
+Users can:
+
+* simulate governance proposals,
+* submit proposals with optional source references,
+* create proposal variants,
+* browse previous simulations,
+* compare simulations,
+* inspect normalization differences,
+* view statistics,
+* view reports in JSON or Markdown format.
+
+No backend server is required for normal operation.
+
+---
+
+# Main Features
+
+## Governance simulation
+
+The contract generates multiple possible future scenarios for governance proposals instead of attempting to predict a single outcome.
+
+Each simulation is accepted only after GenLayer validators reach consensus under a substantive equivalence principle rather than simply validating JSON structure.
+
+Validators must agree on the overall meaning of the generated report, including expected effects and major risks. The consensus principle also explicitly prevents validators from approving, rejecting, or scoring proposals.
+
+---
+
+## Prompt injection protection
+
+User supplied proposal text is treated as untrusted input.
+
+Before it is inserted into the simulation prompt, the contract sanitizes characters that could imitate prompt structure and explicitly instructs the LLM to treat the proposal as data rather than executable instructions.
+
+This reduces the risk of prompt injection affecting the simulation.
+
+---
+
+## Deterministic normalization
+
+After validator consensus, the accepted LLM output is normalized into a deterministic report.
+
+Normalization includes:
+
+* scenario deduplication,
+* scenario merging,
+* confidence normalization,
+* risk severity normalization,
+* likelihood normalization,
+* report structure validation.
+
+If normalization reduces the final scenario count below the intended minimum, the report contains an explicit warning.
+
+---
+
+## On-chain context grounding
+
+For treasury proposals, the contract can optionally retrieve current treasury information from an external JSON source.
+
+When enabled, validators independently fetch:
+
+* treasury balance,
+* monthly spending,
+* runway.
+
+These values are reconciled through a dedicated GenLayer consensus process before being used as factual context during simulation.
+
+This feature is disabled by default and only affects treasury proposals.
+
+---
+
+# Public Write Methods
+
+The contract provides the following write methods:
+
+* `simulate_proposal()`
+* `simulate_proposal_with_reference()`
+* `simulate_variant()`
+* `set_max_proposal_length()` (owner only)
+* `set_onchain_context_enabled()` (owner only)
+* `set_treasury_data_source()` (owner only)
+
+---
+
+# Public Read Methods
+
+The contract provides read methods for retrieving reports, statistics, and simulation history.
+
+These include:
+
+* report retrieval,
+* Markdown report generation,
+* proposal lookup,
+* source reference lookup,
+* variant lookup,
+* normalization difference inspection,
+* category statistics,
+* confidence trends,
+* similar simulations,
+* simulation comparison,
+* recent simulations,
+* owner configuration,
+* contract configuration,
+* simulation count.
+
+---
+
+# Statistics
+
+The contract maintains aggregated statistics across all stored simulations.
+
+Available statistics include:
+
+* simulations per proposal category,
+* confidence distribution by category,
+* total number of simulations.
+
+These statistics are updated automatically as new simulations are stored.
+
+---
+
+# Simulation History
+
+Every completed simulation receives a unique identifier and remains available for later inspection.
+
+The contract supports:
+
+* browsing recent simulations,
+* retrieving previous simulations from the same detected proposal category,
+* comparing reports,
+* tracking proposal variants,
+* preserving source references when provided.
+
+This allows governance discussions to reference earlier simulations instead of treating every proposal as an isolated event.
+
+---
+
+# Report Transparency
+
+Every stored report includes the version of the equivalence principle that was used during validator consensus through the `principle_version` field.
+
+For additional transparency, the contract stores the raw LLM output and provides `get_normalizer_diff()` to compare the original response with the normalized report, including scenario counts and title changes introduced during deterministic normalization.
+
+Reports can also be exported directly as deterministic Markdown through `get_report_markdown()` without using an LLM.
+
+---
+
+# Source References
+
+Simulations may optionally include a source reference pointing to an existing governance proposal such as Snapshot, Tally, or another governance platform.
+
+This creates a direct link between the simulation and the original proposal while remaining optional for standalone simulations.
+
+---
+
+# Proposal Variants
+
+The contract supports creating alternative versions of previously simulated proposals.
+
+`simulate_variant()` reuses the original proposal, replaces the detected percentage value with a new one, and generates a new simulation while preserving a reference to the original simulation.
+
+This allows DAOs to compare alternative parameter choices using the same workflow.
+
+---
+
+# Proposal Length Protection
+
+To prevent unnecessary storage growth and excessive LLM execution, proposal length is validated before simulation begins.
+
+The maximum allowed proposal length is configurable by the contract owner.
+
+---
+
+# Running the Project
+
+1. Deploy `contract/governance_simulator.py` to GenLayer Studio.
+2. Configure the deployed contract address inside `frontend/index.html`.
+3. Deploy the `frontend` directory as a static website.
+4. Submit governance proposals through the frontend or interact directly with the Intelligent Contract.
+
+---
+
+# Known Limitations
+
+* This project is a research demonstration and has not been independently security audited.
+* LLM generated scenarios are intended to assist governance discussions and may contain inaccuracies or omissions.
+* Consensus validates substantive agreement between validator outputs but cannot guarantee that future events will occur as predicted.
+* On-chain context grounding currently supports only treasury proposals.
+* Similar proposal lookup is based on the detected proposal category rather than semantic similarity.
+* Proposal simulations depend on the proposal text and any optional external treasury data available at execution time.
+* Owner only configuration methods require the deploying account.
+
+---
+
+# Repository Structure
 
 ```
 governance-decision-simulator/
 ├── contract/
-│   └── governance_simulator.py   # the Intelligent Contract (single file, GenVM-deployable)
+│   └── governance_simulator.py
 ├── docs/
-│   ├── architecture.md           # pipeline diagram + design decisions
-│   └── example-output.md         # a synthetic example of the report shape
+│   ├── architecture.md
+│   └── example-output.md
 ├── frontend/
-│   ├── index.html                # single-file frontend, no build step, exposes all 22 contract methods
-│   └── proposals.json            # example proposals, one per category, used for the demo chips
+│   ├── index.html
+│   └── proposals.json
 ├── .env.example
 ├── .gitignore
 └── LICENSE
 ```
 
-## Frontend
+---
 
-`frontend/index.html` is a single static file with no build step, split
-into a Write methods section and a Read methods section:
+# License
 
-- **Simulate a proposal** - calls `simulate_proposal`, or
-  `simulate_proposal_with_reference` automatically if a source link is
-  filled in.
-- **Re-run as a variant** - calls `simulate_variant` against an existing
-  simulation ID.
-- **Proposal length cap** - calls `set_max_proposal_length`. Owner-only.
-- **On-chain context grounding** - calls `set_onchain_context_enabled` and
-  `set_treasury_data_source`. Owner-only.
-- **Look up a simulation** - `get_report`, `get_report_markdown`,
-  `get_proposal`, `get_source_reference`, `get_variant_parent`,
-  `get_normalizer_diff`, `get_onchain_context`, all keyed by simulation ID.
-- **Registry overview** - `get_simulations_count`, `get_owner`,
-  `get_max_proposal_length`, `get_onchain_context_config`,
-  `get_category_stats`, `list_recent_simulations`,
-  `find_similar_simulations`, `get_confidence_trend`.
-- **Compare two simulations** - `compare_simulations`.
-
-Every owner-only write is expected to fail with a `UserError` unless
-called from the account that deployed the contract; the page's ephemeral
-account is never that account, so this is the contract enforcing
-ownership correctly, not a bug in the page.
-
-## Running it
-
-1. Deploy `contract/governance_simulator.py` to GenLayer Studionet.
-2. Copy the deployed contract address into `frontend/index.html`
-   (`CONTRACT_ADDRESS` constant near the top of the `<script>` block).
-   The currently deployed instance is at
-   `0x698Fd7107f5dDBf3aA255277512f94DbF5d5a919`. Re-check this after any
-   redeploy, an old address points at a stale contract instance with a
-   different state history.
-3. Deploy this repository to Vercel with **Root Directory set to
-   `frontend`**. `index.html` fetches `./proposals.json`, which lives in
-   the same folder, so this works regardless of other Root Directory
-   settings. Vercel will serve `index.html` at your deployment's root URL
-   automatically.
-4. Paste a governance proposal (or click one of the example chips) and
-   submit. The contract returns the structured simulation report. Use the
-   Read methods panels below to look up, browse, or compare simulations
-   already stored on-chain.
-
-`.env.example` documents the RPC endpoint and contract address you'll need,
-but note that `frontend/index.html` has no build step and does not read
-`.env` at runtime. Set `CONTRACT_ADDRESS` and `RPC_URL` directly as
-constants in the script instead.
-
-## Known rough edges
-
-- `consensus_summary.areas_of_agreement` tends to come back empty. The
-  contract's Consensus Layer looks for an exact-text match on a recurring
-  risk or assumption across scenarios, which rarely happens with only 3-4
-  LLM-generated scenarios per run. See
-  [`docs/architecture.md`](docs/architecture.md#known-limitations-by-design-for-a-research-poc)
-  for details.
-- `simulate_variant` (and, less often, `simulate_proposal`) can land on
-  `UNDETERMINED` consensus if enough validators judge the leader's
-  scenario set as substantively different under the `prompt_comparative`
-  equivalence principle. When that happens the transaction can still show
-  as finalized in Studio but the write never actually commits (the
-  simulation ID is not incremented and nothing is stored). Check
-  `get_simulations_count` after any write that looked slow or contentious
-  in the Consensus History panel, and simply resubmit if the count didn't
-  change.
-- Any `@gl.public.view` method that returns an empty string renders
-  nothing at all in Studio's Call Contract response panel, no `""`, no
-  placeholder. Confirmed via the raw RPC response (a minimal, non-error,
-  non-null result) - this is a Studio UI display issue, not a contract
-  bug. `get_onchain_context`, `get_source_reference`, and
-  `get_variant_parent` all hit this for simulations where nothing was
-  stored; the frontend works around it by rendering an explicit "not
-  used" note instead of leaving the box blank, but calling these methods
-  directly in Studio for an empty case will look like no response
-  happened.
-- The frontend's `genlayer-js` import path and client method names follow
-  the pattern used in earlier GenLayer demos and have been confirmed
-  working against a live Studio deployment for both write and read calls,
-  including the non-LLM web fetch used by on-chain context grounding
-  (`gl.nondet.web.render`). If a future SDK version renames these,
-  check the current `genlayer-js` docs and see the READ-CALL SHAPE note
-  near the top of `index.html`'s script block.
-
-## License
-
-MIT, see [LICENSE](LICENSE).
+MIT. See the `LICENSE` file for details.
