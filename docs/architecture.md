@@ -1,391 +1,831 @@
+# Architecture
+
 ## Purpose
 
-The AI Governance Decision Simulator is a GenLayer Intelligent Contract that
-turns a DAO governance proposal into a decision support report: a set of
-plausible future scenarios, never a recommendation, score, or vote.
+AI Governance Decision Simulator is a GenLayer Intelligent Contract that generates structured governance simulation reports for DAO proposals.
 
-It exists to demonstrate four GenLayer specific capabilities in one
-concrete, useful project:
+The contract does not approve, reject, rank, or score proposals. Instead, it produces several plausible future scenarios that help participants evaluate possible consequences before voting.
 
-1. Nondeterministic execution: LLM calls that legitimately produce
-   different text across runs and validators.
-2. Validator consensus over AI generated reasoning, using
-   `gl.eq_principle.prompt_comparative` instead of strict equality, since
-   scenario wording naturally differs between validators even when the
-   underlying reasoning is sound.
-3. On chain structured decision support: a smart contract that reasons
-   about the future rather than just executing deterministic rules.
-4. Optional real-world grounding: an owner-configurable, independently
-   fetched external data source that anchors the LLM's reasoning in
-   current facts instead of pure assumption, reconciled across
-   validators the same way the LLM output is.
+The project demonstrates how GenLayer can combine nondeterministic LLM execution with validator consensus while preserving deterministic on chain state.
 
-## Pipeline
+---
 
-```
-Proposal (raw text)
-      |
-      v
-[1] Proposal Parser        -> structured parameters
-      |                        (percent change, from/to, $ amount)
-      v
-[2] Proposal Classifier    -> category (10 types) + compound flag
-      |
-      v
-[3] On-chain Context Fetcher -> optional real-data grounding
-      |                          (treasury category only, proof of
-      |                          concept). gl.eq_principle.prompt_comparative
-      |                          with a numeric-tolerance principle;
-      |                          skipped entirely (context = None) unless
-      |                          the owner has enabled it and configured
-      |                          a data source for this category
-      v
-[4] Simulation Prompt Builder -> category specific nondet prompt,
-      |                          with prompt injection mitigation and,
-      |                          if available, the fetched context framed
-      |                          as trusted ground truth
-      v
-[5] Scenario Generator     -> gl.eq_principle.prompt_comparative(fn, principle)
-      |                        fn: zero argument nondet LLM call
-      |                        GenVM runs fn once for the leader, once
-      |                        per validator, and has each validator
-      |                        judge its own result against the
-      |                        leader's via NLP using `principle`
-      v
-[6] Scenario Normalizer    -> fill missing fields, clamp risk severity
-      |                        and likelihood, dedupe/merge similar
-      |                        scenarios (Jaccard similarity, no LLM),
-      |                        flag it if the result drops below 3
-      v
-[7] Risk & Assumption Engine -> fallback risk/assumption injection,
-      |                          cross scenario recurrence aggregation
-      v
-[8] Consensus Layer        -> consensus_scenarios / minor_differences /
-      |                        unique_insights bucketing
-      v
-[9] Simulation Report Builder -> final structured JSON report
-      |
-      v
-Returned to caller, stored on chain, and folded into the running
-per category counters (category_counts, category_confidence_totals)
-```
+## System Overview
 
-Stages 1, 2, 6, 7, 8, and 9 are fully deterministic (no LLM call, cheap,
-safe to run on every validator without consensus concerns). Stages 3 and
-5 are the only nondeterministic ones, and the only two places
-`gl.eq_principle.prompt_comparative` is used, each with its own
-equivalence principle tuned to what it is comparing.
+The project consists of two components.
 
-`simulate_proposal`, `simulate_proposal_with_reference`, and
-`simulate_variant` all run this exact same pipeline through a single shared
-internal method, `_run_pipeline_and_store`, so the three entry points never
-drift apart from one another.
+### Intelligent Contract
 
-## Why `prompt_comparative`, not `strict_eq`
+The Intelligent Contract performs the complete simulation pipeline.
 
-Two validators independently calling the same LLM prompt will produce
-different scenario titles, different phrasing, sometimes a different number
-of scenarios. `gl.eq_principle.strict_eq` would treat all of that as
-disagreement and return `UNDETERMINED` almost every time.
+Its responsibilities include:
 
-An earlier version of this contract's scenario `principle` asked
-validators only "is this a similarly structured JSON scenario set?". That
-checks that the leader formatted its answer correctly, but not whether the
-answer is actually sound. That is the "leader output only validation"
-anti pattern the GenLayer equivalence principle docs warn against: a
-validator that only checks a result for a valid JSON shape is not
-performing real consensus. Two validators could return scenario sets that
-directly contradict each other on substance (one says treasury runway
-improves, the other says it collapses) and both would still pass, because
-only the JSON shape was being compared.
+- proposal classification,
+- optional external treasury context retrieval,
+- LLM based scenario generation,
+- validator consensus,
+- deterministic normalization,
+- report generation,
+- report storage,
+- statistics aggregation,
+- simulation comparison,
+- audit support.
 
-The current scenario `principle` instead asks validators to judge
-substantive agreement on the parts of the output that function as
-decision fields:
+### Frontend
 
-- Neither output may approve, reject, score, or recommend the proposal.
-- For each effect category both outputs cover, the net direction implied
-  (positive, negative, neutral, or mixed) must not directly contradict the
-  other output.
-- Neither output may ignore a risk theme the other treats as
-  high severity or major.
+The frontend is a lightweight static application that communicates directly with the deployed Intelligent Contract.
 
-Titles, phrasing, exact scenario count, and which specific assumptions are
-listed remain free to differ, since those are legitimately subjective.
-`strict_eq` was never the right tool for them. This keeps the "do these two
-outputs represent the same kind of reasoning" bar `prompt_comparative` is
-good at, while removing the pure rubber stamp failure mode described above.
+It exposes every public contract method and provides an interface for:
 
-Its signature is `prompt_comparative(fn, principle)`: a zero argument
-callable and a plain language equivalence principle. GenVM calls `fn` once
-for the leader and once per validator internally, and handles the
-leader vs validator comparison itself. The contract does not manually
-orchestrate a leader/validator pair or call `gl.vm.run_nondet` directly for
-this. An earlier draft of this contract called `prompt_comparative` with
-3 positional arguments, mimicking a manual comparator. That crashed every
-validator with a `TypeError` in live Studio testing before it was
-corrected to the current 2 argument form.
+- creating simulations,
+- viewing reports,
+- browsing history,
+- comparing simulations,
+- inspecting normalization results,
+- viewing contract statistics.
 
-## On-chain context grounding (proof of concept, treasury category only)
+No backend server is required.
 
-Every simulation up to this point reasoned purely from `proposal_text`:
-the LLM had no anchor in the DAO's actual current financial position, only
-its own assumptions about what a plausible treasury might look like. This
-module adds an optional, owner-configured step (stage 3 above) that
-fetches real data before the prompt is built.
+---
 
-**Why a second, separate `prompt_comparative` call, with its own
-principle.** The scenario generator's principle (above) judges whether
-two pieces of AI reasoning are substantively compatible. The context
-fetch is not AI reasoning at all, it is a raw external data read, but it
-still needs cross-validator reconciliation, because the data source is
-live and will not return byte-identical values to the leader and to each
-validator a few seconds later (a real balance moves). `strict_eq` would
-fail almost every time, for a completely different reason than it would
-fail on LLM text. So this needed its own principle, tuned for numeric
-tolerance rather than semantic equivalence:
+# Simulation Pipeline
 
-> Both texts are JSON snapshots of the same treasury data source, fetched
-> moments apart by different validators. They are EQUIVALENT only if:
-> (1) both are valid JSON objects containing `treasury_balance_usd`,
-> `monthly_spend_usd`, and `runway_months`; (2) each of those three
-> numeric fields differs by no more than 5% between the two readings, or
-> by no more than 1 unit for `runway_months` specifically; (3) neither
-> text is an error message, empty object, or placeholder where the other
-> is a real reading. Field ordering, extra fields, formatting, or a
-> timestamp do not count as disagreement.
-
-**Degrades gracefully by design.** `_fetch_onchain_context` never raises
-and never blocks `simulate_proposal`. If the category has no fetcher
-wired up, the owner hasn't configured a URL, the network call itself
-fails, or the response does not parse into the expected shape, the method
-returns `(None, [warning])` and the pipeline proceeds exactly as if this
-feature did not exist, with a `parser_warnings` entry noting what
-happened. `onchain_context_used` on the report is `False` in every one of
-those cases.
-
-**Confirmed live**, not just designed on paper: with the feature enabled
-and pointed at a public JSON snapshot (`treasury_balance_usd: 4200000,
-monthly_spend_usd: 175000, runway_months: 24`), a real `simulate_proposal`
-call produced scenarios that computed directly off those numbers, for
-example deriving a new runway as `4200000 / 192500` after applying the
-proposal's own 10% spend increase, rather than inventing unrelated
-figures. The Equivalence Principle output for that transaction shows the
-raw fetched JSON exactly as configured, confirming each validator
-genuinely re-fetched the URL itself rather than trusting the leader's
-value.
-
-**Extending beyond treasury.** `_ONCHAIN_CONTEXT_FETCHERS` maps a category
-name to `(data-source field name, parser function)`. Adding another
-grounded category is adding one entry there plus a matching parser
-function; `_fetch_onchain_context`, `build_simulation_prompt`, and
-`_run_pipeline_and_store` need no changes.
-
-## Report field: `principle_version`
-
-Every report also carries a `principle_version` string
-(`_EQUIVALENCE_PRINCIPLE_VERSION` in the contract), bumped whenever the
-scenario `principle` text changes in a meaningful way. This makes it
-possible to tell, just by reading a stored report, which consensus rules
-it was accepted under. Reports generated under an older principle simply
-carry an older version string; nothing is retroactively rewritten. The
-context-fetch principle (`_ONCHAIN_NUMERIC_TOLERANCE_PRINCIPLE`) is not
-currently versioned the same way, since it governs a proof-of-concept
-feature that is off by default.
-
-## Prompt injection mitigation
-
-`proposal_text` is fully attacker controlled and is embedded inside the
-LLM prompt. Two defenses are layered on top of the "STRICT RULES" block
-that already instructs the model never to approve, score, or rank:
-
-1. `_sanitize_for_prompt_embedding` strips the contract's own delimiter
-   token if it appears inside the proposal text, and collapses long runs
-   of quote, backtick, or dash characters, the most common patterns an
-   injection attempt would lean on to fake a "new instruction block".
-2. The prompt explicitly labels the proposal text block as untrusted
-   user submitted data that cannot override the rules above it, even if
-   it contains text that reads like a command.
-
-On-chain context, when present, is deliberately handled the opposite way:
-it is framed in the prompt as trusted, factual data, since it was
-independently fetched and cross-validated rather than supplied by whoever
-wrote the proposal. The two blocks are kept clearly distinct in the
-prompt so the model does not conflate "data to be skeptical of" with
-"data to treat as ground truth".
-
-This is defense in depth, not a formal guarantee. It raises the bar
-against a casual injection attempt, it does not eliminate the risk of a
-sufficiently creative one, and it has not yet been stress tested against
-adversarial inputs on live Studionet validators.
-
-## Storage layout
-
-```python
-owner: Address
-simulations_count: u256
-reports: TreeMap[u256, str]               # simulation_id -> full JSON report
-proposals: TreeMap[u256, str]             # simulation_id -> original raw proposal text
-category_counts: TreeMap[str, u256]       # category -> simulation count
-max_proposal_length: u256                 # owner configurable input length cap, default 4000
-source_references: TreeMap[u256, str]     # simulation_id -> external reference, if set
-raw_llm_outputs: TreeMap[u256, str]       # simulation_id -> raw accepted LLM text
-category_confidence_totals: TreeMap[str, str]  # category -> JSON encoded confidence totals
-variant_of: TreeMap[u256, u256]           # variant simulation_id -> parent simulation_id
-onchain_context_enabled: bool             # owner toggle, default False
-treasury_data_source_url: str             # owner configured URL, default "" (unconfigured)
-onchain_contexts: TreeMap[u256, str]      # simulation_id -> JSON context actually used, if any
-```
-
-Reports are stored as JSON strings rather than typed nested structures,
-since GenVM storage types don't support arbitrarily nested dicts and
-lists. This also makes reports trivially returnable to any frontend as is.
-
-Important: none of the TreeMap fields above are reassigned inside
-`__init__`. GenVM zero initializes every declared storage field at deploy
-time, so each TreeMap already exists as an empty instance of its own
-specific generic type (`TreeMap[u256, str]`, `TreeMap[str, u256]`, and so
-on) before `__init__` ever runs. An earlier version of this contract wrote
-`self.category_counts = TreeMap()` (and similar lines) for every TreeMap
-field in `__init__`, out of habit from plain Python classes. That crashed
-every validator on deploy with:
+Every proposal follows the same execution pipeline.
 
 ```
-AssertionError: Is right the same storage type? `TreeMap` <- `TreeMap`
+Proposal Text
+      │
+      ▼
+Proposal Parser
+      │
+      ▼
+Proposal Classification
+      │
+      ▼
+Optional Treasury Context Fetch
+      │
+      ▼
+Prompt Builder
+      │
+      ▼
+LLM Scenario Generation
+      │
+      ▼
+Validator Consensus
+      │
+      ▼
+Deterministic Normalization
+      │
+      ▼
+Report Builder
+      │
+      ▼
+Store Report
+      │
+      ▼
+Update Statistics
 ```
 
-The runtime could not match the newly constructed, generic-less
-`TreeMap()`'s type descriptor against the specific generic instantiation
-already bound to that storage slot. None of the official GenLayer examples
-reassign a bare `TreeMap()` onto a `TreeMap`-typed field in `__init__`;
-they simply leave it alone. `__init__` assigns only the non-collection
-fields (`owner`, `simulations_count`, `max_proposal_length`,
-`onchain_context_enabled`, `treasury_data_source_url`) and otherwise does
-nothing; every `TreeMap` field is left untouched.
+The three public simulation methods
 
-## Public methods
+- simulate_proposal()
+- simulate_proposal_with_reference()
+- simulate_variant()
 
-Write methods (`simulate_proposal`, `simulate_proposal_with_reference`,
-and `simulate_variant` each go through `_run_pipeline_and_store`; the
-three owner-only methods touch only their own configuration field and no
-simulation data):
+all execute the same internal pipeline before storing the resulting report.
 
-- `simulate_proposal(proposal_text)`: the main entry point.
-- `simulate_proposal_with_reference(proposal_text, source_reference)`:
-  identical pipeline, additionally records an external reference such as
-  a Snapshot or Tally URL, retrievable via `get_source_reference`.
-- `simulate_variant(simulation_id, new_percent)`: re-runs the pipeline on
-  a copy of a previously stored proposal with its percentage swapped for
-  `new_percent`, linked back to the original via `get_variant_parent`.
-  `new_percent` is a string (for example `"12"` or `"7.5"`), not a float:
-  GenVM's calldata type system has no float type, since floating point is
-  not a safe, cross validator deterministic calldata primitive. Only
-  int, bigint, str, bool, bytes, Address, and the DynArray/TreeMap
-  collection types are supported. A `float` type hint on a public method
-  parameter fails contract schema loading entirely rather than raising an
-  ordinary Python error at call time.
-- `set_max_proposal_length(new_max)`: owner only, adjusts the length cap
-  enforced on every `proposal_text` without needing a redeploy.
-- `set_onchain_context_enabled(enabled)`: owner only, turns the on-chain
-  context fetch attempt on or off globally.
-- `set_treasury_data_source(url)`: owner only, sets or clears (with an
-  empty string) the URL the treasury category's context fetch reads
-  from.
+---
 
-Read methods:
+# Proposal Parsing
 
-- `get_simulations_count`, `get_report`, `get_proposal`, `get_owner`,
-  `get_max_proposal_length`: direct accessors.
-- `get_onchain_context_config()`: whether the feature is enabled and
-  which data source URL is configured, as a single JSON object.
-- `get_onchain_context(simulation_id)`: the JSON context actually used for
-  a given simulation, empty string if none was fetched or used for that
-  run.
-- `get_category_stats`: category to simulation count, from the
-  incrementally maintained `category_counts` map.
-- `list_recent_simulations(limit)`: newest first compact history, so a
-  frontend does not need to fetch every full report individually.
-- `get_source_reference(simulation_id)`, `get_variant_parent(simulation_id)`:
-  accessors for the two linking maps above.
-- `find_similar_simulations(category, limit)`: most recent simulations
-  matching a category, scanning at most the most recent 1000 simulations
-  regardless of `limit`, so cost stays bounded even with a long history.
-- `get_confidence_trend(category)`: running confidence level totals for
-  one category, from `category_confidence_totals`.
-- `compare_simulations(id1, id2)`: deterministic diff between two stored
-  reports (category match, confidence distribution, shared vs unique
-  scenario titles). No LLM call, pure comparison of already agreed JSON.
-- `get_normalizer_diff(simulation_id)`: compares the raw accepted LLM text
-  against the final report, to show how many scenarios were merged or
-  dropped by the Normalizer.
-- `get_report_markdown(simulation_id)`: the same report rendered as
-  readable Markdown, for pasting into a forum post or chat without a JSON
-  parser.
+Before simulation begins, the proposal text is parsed to extract structured information where possible.
 
-## Hard constraints (enforced at multiple layers)
+The parser may identify:
 
-| Constraint | Enforced by |
-|---|---|
-| Never approve/reject | Never modeled as a field anywhere in the pipeline. There is no boolean or score field to set. This is a prompt level rule as well: nothing in the pipeline inspects generated text for accidental recommendation or score language, but the equivalence `principle` (see above) now also rejects any nondet result where either the leader or validator output did approve, reject, or score. |
-| Never score/rank | `Scenario` has no numeric score field; `confidence` is qualitative (High/Medium/Low/Very Low), not a rank. |
-| Resist prompt injection | See "Prompt injection mitigation" above. Defense in depth, not a hard guarantee. |
-| At least 3 scenarios | The Prompt Builder explicitly requests at least 3. This is a request to the LLM, not a hard guarantee: the LLM can return fewer, and the Normalizer's similarity merge can, rarely, collapse distinct scenarios that share a default title or summary into one. Both cases are detected and surfaced as a `parser_warnings` entry on the report rather than failing silently. |
-| Risk severity/likelihood stay in schema | `_normalize_single_risk` clamps `severity` to low/medium/high/critical and `likelihood` to low/medium/high, the same way `confidence` is clamped for the scenario as a whole. |
-| Always explicit assumptions | The Risk & Assumption Engine injects a fallback assumption if the LLM omitted one. |
-| Avoid false certainty | `disclaimer` field on every report; confidence is about internal consistency, not correctness (documented in the Scenario docstring). |
-| Bounded per call cost | `max_proposal_length` (owner configurable, default 4000 characters) rejects an oversized `proposal_text` before any LLM call or state write happens. |
-| On-chain context never blocks a simulation | `_fetch_onchain_context` catches any fetch/parse failure and returns `(None, [warning])` instead of raising; the pipeline always falls back to proposal-text-only reasoning. |
+- percentage changes,
+- numeric values,
+- proposal category,
+- proposal type.
 
-## Frontend
+These extracted values are used to improve prompt construction and to support proposal variants.
 
-Single file `frontend/index.html` (deployed as a static site to Vercel),
-using ephemeral `createAccount()` accounts (no wallet UI), following the
-same pattern used in the earlier Decentralized Fact Checker project.
-Split into a Write methods section (Simulate a proposal, Re-run as a
-variant, Proposal length cap, On-chain context grounding) and a Read
-methods section (Look up a simulation, Registry overview, Compare two
-simulations), covering all 22 contract methods. Calls go through
-`genlayer-js`, poll for the transaction receipt, and render the
-structured report (scenarios, effects, risks, consensus summary,
-on-chain grounding indicator) as cards. The proposal text field enforces
-the same length cap client side as `max_proposal_length` defaults to on
-chain, with a live character counter, so an oversized submission fails
-fast in the UI rather than after a wasted transaction.
+The original proposal text is always preserved.
 
-## Known limitations (by design, for a research proof of concept)
+---
 
-- The deterministic parser (regex based) can occasionally double count a
-  percent value already captured by a from/to pair. This is harmless,
-  since the LLM stage reasons over the raw text regardless.
-- The Consensus Layer operates on the already agreed final scenario set,
-  not on each individual validator's raw output. GenVM does not expose
-  per validator raw results to the contract after consensus.
-- Malformed or non JSON LLM output degrades gracefully (empty scenario
-  list plus warning) rather than reverting the transaction.
-- `consensus_summary.areas_of_agreement` has stayed empty across every
-  real run so far, including runs made after the substantive `principle`
-  and risk-normalization changes described above. The Consensus Layer
-  looks for a recurring risk or assumption with matching text across
-  scenarios, and with only 3 to 4 LLM generated scenarios per run, an
-  exact text match rarely happens even when scenarios are thematically
-  related. This is a real, reconfirmed observation, not a stale one.
-- On-chain context grounding is wired up for the `treasury` category
-  only. A live external data source will also occasionally cause the
-  context-fetch `prompt_comparative` call itself to land on
-  `UNDETERMINED` if validators' independent fetches drift by more than
-  the tolerance, or if one validator's fetch fails outright while
-  another's succeeds; when that happens the write still finalizes but
-  simply proceeds with `onchain_context = None` for that attempt (the
-  fetch step raising internally is caught the same way a broken endpoint
-  is).
-- Prompt injection mitigation has not been stress tested against
-  adversarial inputs on live Studionet validators. Treat it as raising
-  the bar, not as a hardened guarantee.
-- Any `@gl.public.view` method returning an empty string renders nothing
-  at all in GenLayer Studio's Call Contract response panel (confirmed via
-  the raw RPC response, which is a valid, non-error result). This is a
-  Studio UI display issue, not a contract bug, but it means testing
-  `get_onchain_context`, `get_source_reference`, or `get_variant_parent`
-  for a simulation where nothing was stored will look like no response
-  happened in Studio specifically.
+# Proposal Classification
 
+The contract classifies each proposal into one supported governance category.
+
+The detected category determines:
+
+- prompt template,
+- report structure,
+- optional treasury grounding,
+- stored category statistics.
+
+The detected category is stored inside every report.
+
+---
+
+# Optional Treasury Context
+
+Treasury proposals may optionally use external financial context.
+
+When enabled by the contract owner, validators independently retrieve treasury information from a configured JSON endpoint.
+
+The retrieved data may include:
+
+- treasury balance,
+- monthly spending,
+- runway.
+
+The fetched values are reconciled through a dedicated GenLayer consensus step before they are used by the simulation prompt.
+
+If fetching fails, the simulation continues normally without external context.
+
+The report records whether external context was used through the `onchain_context_used` field.
+
+---
+
+# Scenario Generation
+
+Scenario generation is the only stage where the LLM creates new content.
+
+The contract performs nondeterministic execution through GenLayer and validator consensus using `gl.eq_principle.prompt_comparative`.
+
+The equivalence principle evaluates whether validator outputs are substantively compatible rather than requiring identical wording.
+
+Validator outputs may differ in:
+
+- wording,
+- scenario titles,
+- ordering,
+- writing style.
+
+They are expected to remain consistent regarding:
+
+- overall proposal effects,
+- major risks,
+- governance implications.
+
+The equivalence principle also requires that generated reports do not approve, reject, score, or recommend governance proposals.
+
+---
+
+# Deterministic Normalization
+
+After consensus, the accepted output is normalized without additional LLM calls.
+
+Normalization includes:
+
+- completing missing fields,
+- normalizing confidence values,
+- normalizing risk severity,
+- normalizing likelihood values,
+- merging duplicate scenarios,
+- validating report structure.
+
+If normalization reduces the final scenario count below the intended minimum, the report includes an explicit warning.
+
+---
+
+# Report Generation
+
+Each simulation produces a structured JSON report containing:
+
+- proposal summary,
+- detected proposal type,
+- generated scenarios,
+- treasury effects,
+- governance effects,
+- validator effects,
+- community effects,
+- protocol effects,
+- identified risks,
+- confidence values,
+- consensus summary,
+- parser warnings,
+- disclaimer,
+- principle_version.
+
+Every report is stored on chain.
+
+---
+
+# Consensus Version Tracking
+
+Every report stores the field:
+
+`principle_version`
+
+This value records which version of the equivalence principle was used when validator consensus accepted the report.
+
+Older reports retain the version that was active when they were generated.
+
+The contract does not modify historical reports after they have been stored.
+
+---
+
+# Prompt Injection Mitigation
+
+Proposal text is treated as untrusted input.
+
+Before insertion into the prompt, the contract sanitizes characters commonly used to imitate prompt structure and explicitly labels the proposal text as user supplied data rather than executable instructions.
+
+This reduces the likelihood of prompt injection affecting the generated scenarios.
+
+This mitigation improves robustness but should not be considered a complete guarantee against all prompt injection techniques.
+
+---
+
+# Storage Layout
+
+The contract stores:
+
+- simulation reports,
+- original proposal text,
+- raw accepted LLM output,
+- proposal source references,
+- variant relationships,
+- optional treasury context,
+- category statistics,
+- confidence statistics,
+- owner configuration.
+
+Reports are stored as JSON strings, allowing the frontend to retrieve and display them directly without additional serialization.
+
+# Public Methods
+
+The contract exposes write methods for creating simulations and managing
+owner configuration, as well as read methods for inspecting stored data.
+
+## Write Methods
+
+### simulate_proposal(proposal_text)
+
+The main simulation entry point.
+
+It:
+
+1. validates the proposal length,
+2. parses and classifies the proposal,
+3. optionally retrieves treasury context when enabled,
+4. generates scenarios through nondeterministic LLM execution,
+5. applies GenLayer validator consensus,
+6. normalizes the accepted result,
+7. builds the final report,
+8. stores the report and related metadata,
+9. updates category and confidence statistics.
+
+The method does not return a governance recommendation.
+
+---
+
+### simulate_proposal_with_reference(proposal_text, source_reference)
+
+Runs the same simulation pipeline as `simulate_proposal`.
+
+In addition, it stores an external reference associated with the simulation.
+
+The reference can point to an external governance proposal or discussion, for example a Snapshot or Tally URL.
+
+The reference can later be retrieved with:
+
+`get_source_reference(simulation_id)`
+
+The reference itself is metadata and does not affect the simulation logic.
+
+---
+
+### simulate_variant(simulation_id, new_percent)
+
+Creates a new simulation based on an existing stored proposal.
+
+The method:
+
+1. retrieves the original proposal,
+2. replaces the percentage value used by the variant,
+3. runs the standard simulation pipeline again,
+4. stores the new result as a separate simulation,
+5. records the relationship between the new simulation and its parent.
+
+The relationship can be retrieved with:
+
+`get_variant_parent(simulation_id)`
+
+The variant is a new simulation and does not modify the original report.
+
+The `new_percent` parameter is passed as a string rather than a floating point value.
+
+---
+
+## Owner Configuration Methods
+
+### set_max_proposal_length(new_max)
+
+Changes the maximum allowed proposal length.
+
+The limit is checked before the simulation pipeline starts.
+
+The default limit is 4000 characters.
+
+This method is restricted to the contract owner.
+
+---
+
+### set_onchain_context_enabled(enabled)
+
+Enables or disables optional external treasury context retrieval.
+
+The feature is disabled by default.
+
+This method is restricted to the contract owner.
+
+---
+
+### set_treasury_data_source(url)
+
+Sets the external JSON data source used for treasury context retrieval.
+
+Passing an empty string clears the configured data source.
+
+This method is restricted to the contract owner.
+
+---
+
+# Read Methods
+
+## Basic Accessors
+
+### get_simulations_count()
+
+Returns the number of successfully stored simulations.
+
+---
+
+### get_report(simulation_id)
+
+Returns the complete stored JSON report for a simulation.
+
+---
+
+### get_proposal(simulation_id)
+
+Returns the original proposal text associated with a simulation.
+
+---
+
+### get_owner()
+
+Returns the contract owner address.
+
+---
+
+### get_max_proposal_length()
+
+Returns the currently configured proposal length limit.
+
+---
+
+## On Chain Context
+
+### get_onchain_context_config()
+
+Returns the current configuration of the optional treasury context feature.
+
+This includes:
+
+- whether the feature is enabled,
+- the configured data source URL.
+
+This method returns configuration for the contract as a whole.
+
+It does not return the context used by a particular simulation.
+
+---
+
+### get_onchain_context(simulation_id)
+
+Returns the external context that was actually used for a specific simulation.
+
+If no external context was used, the method returns an empty string.
+
+This makes it possible to distinguish between:
+
+- the current contract configuration,
+- the data actually used during a historical simulation.
+
+---
+
+## Statistics
+
+### get_category_stats()
+
+Returns the number of stored simulations for each detected proposal category.
+
+The values are maintained incrementally as simulations are stored.
+
+---
+
+### get_confidence_trend(category)
+
+Returns accumulated confidence totals for simulations belonging to a selected category.
+
+This provides a historical view of confidence levels across simulations rather than the confidence of one individual report.
+
+The values are based on the confidence distribution stored for each simulation.
+
+---
+
+## Simulation History
+
+### list_recent_simulations(limit)
+
+Returns a compact list of recent simulations.
+
+The newest simulations are returned first.
+
+This allows a frontend to display simulation history without retrieving every complete report individually.
+
+---
+
+### find_similar_simulations(category, limit)
+
+Returns recent simulations that belong to the same detected proposal category.
+
+This is a category based lookup.
+
+It does not perform semantic similarity search, embeddings, or natural language similarity analysis.
+
+The search is bounded to the most recent 1000 simulations to prevent unbounded scanning costs.
+
+---
+
+## Simulation Relationships
+
+### get_source_reference(simulation_id)
+
+Returns the external source reference stored for a simulation.
+
+If no reference was provided, the result is empty.
+
+---
+
+### get_variant_parent(simulation_id)
+
+Returns the parent simulation ID associated with a variant.
+
+This allows the frontend or another caller to trace a variant back to the original simulation.
+
+---
+
+## Simulation Comparison
+
+### compare_simulations(id1, id2)
+
+Performs a deterministic comparison of two stored reports.
+
+The comparison includes:
+
+- whether the detected categories match,
+- confidence distributions,
+- scenario titles shared by both reports,
+- scenario titles unique to each report.
+
+The comparison does not call an LLM.
+
+It operates only on already stored simulation data.
+
+This makes it useful for examining different simulations of similar proposals or comparing a variant with its parent.
+
+---
+
+## Normalizer Inspection
+
+### get_normalizer_diff(simulation_id)
+
+Compares the raw accepted LLM output with the final normalized report.
+
+The method provides information about changes introduced during normalization, including:
+
+- raw scenario count,
+- final scenario count,
+- the number of scenarios merged or dropped,
+- raw scenario titles,
+- final scenario titles.
+
+The method exists to make deterministic post processing more transparent.
+
+---
+
+## Markdown Export
+
+### get_report_markdown(simulation_id)
+
+Returns the stored report rendered as Markdown.
+
+The Markdown is generated deterministically from the stored report.
+
+No additional LLM call is performed.
+
+This provides a readable representation suitable for copying into governance discussions, forums, or chat applications.
+
+---
+
+# Design Constraints
+
+The contract applies several constraints throughout the simulation pipeline.
+
+## No Governance Recommendation
+
+The contract does not contain a proposal approval or rejection field.
+
+The generated report is designed to describe possible outcomes rather than make a governance decision.
+
+The report also contains an explicit disclaimer explaining that the output is informational and does not approve, reject, score, or recommend a proposal.
+
+The validator equivalence principle additionally treats approval, rejection, scoring, or recommendation as invalid behavior for the generated output.
+
+This is a combination of prompt level and consensus level protection.
+
+It should not be interpreted as a formal guarantee that an LLM can never produce recommendation like language.
+
+---
+
+## Qualitative Confidence
+
+Scenario confidence is represented using qualitative values:
+
+- High
+- Medium
+- Low
+- Very Low
+
+Confidence is not a proposal score.
+
+It describes the internal confidence associated with an individual generated scenario.
+
+The contract does not calculate a numeric governance score or ranking.
+
+---
+
+## Risk Normalization
+
+Risk objects contain normalized severity and likelihood values.
+
+Severity is restricted to the supported qualitative values.
+
+Likelihood is also normalized to the supported qualitative values.
+
+Unexpected LLM values are replaced with valid schema values during deterministic normalization.
+
+---
+
+## Scenario Count
+
+The prompt requests at least three scenarios.
+
+This is not an absolute runtime guarantee.
+
+The LLM may return fewer scenarios, and deterministic normalization may merge scenarios that are considered sufficiently similar.
+
+If the final number of scenarios is below the intended minimum, the report records a warning in `parser_warnings`.
+
+The contract therefore exposes the condition rather than silently claiming that three distinct scenarios were produced.
+
+---
+
+## Assumptions
+
+The report is expected to contain scenario assumptions.
+
+If the LLM does not provide an explicit assumption for a scenario, the deterministic processing stage can insert a fallback assumption.
+
+This ensures that the final report retains an explicit indication that the scenario depends on assumptions.
+
+---
+
+## Proposal Length Limit
+
+The proposal length limit is enforced before LLM execution.
+
+The owner can change the limit without redeploying the contract.
+
+This prevents arbitrarily large proposal inputs from entering the simulation pipeline.
+
+The default maximum proposal length is 4000 characters.
+
+---
+
+## External Context Failure Handling
+
+External treasury context is optional.
+
+If context retrieval is unavailable or cannot be parsed into the expected structure, the simulation continues without external context.
+
+The report records the condition through `parser_warnings`.
+
+The simulation is therefore not dependent on successful access to the configured external data source.
+
+---
+
+# Frontend
+
+The frontend is located in:
+
+`frontend/index.html`
+
+It is a single static HTML file with no build step.
+
+The application communicates directly with the GenLayer contract through `genlayer-js`.
+
+The interface is divided into write and read operations.
+
+## Write Interface
+
+The frontend provides access to:
+
+- proposal simulation,
+- proposal simulation with an optional source reference,
+- variant simulation,
+- proposal length configuration,
+- treasury context configuration.
+
+Owner only methods are subject to the same ownership checks as direct contract calls.
+
+---
+
+## Read Interface
+
+The frontend provides access to:
+
+- stored reports,
+- Markdown reports,
+- original proposals,
+- source references,
+- variant relationships,
+- Normalizer differences,
+- treasury context,
+- contract configuration,
+- category statistics,
+- confidence trends,
+- recent simulations,
+- category based historical lookup,
+- simulation comparison,
+- simulation count.
+
+The frontend renders the structured report and its main sections for human inspection.
+
+---
+
+# Data Flow Between Contract and Frontend
+
+The frontend does not independently reproduce the simulation logic.
+
+The contract remains responsible for:
+
+- proposal parsing,
+- classification,
+- LLM execution,
+- validator consensus,
+- normalization,
+- report generation,
+- storage.
+
+The frontend primarily acts as an interface for submitting inputs and reading stored results.
+
+This means the same stored report can also be accessed directly through the contract read methods without using the frontend.
+
+---
+
+# Known Limitations
+
+The project is a research proof of concept and has several known limitations.
+
+## LLM Output
+
+The scenarios are generated by an LLM.
+
+They represent plausible possibilities and should not be interpreted as reliable predictions.
+
+The contract does not verify that a scenario will actually occur.
+
+---
+
+## Consensus Is Not Truth Verification
+
+The GenLayer equivalence principle checks whether validator outputs are substantively compatible.
+
+It does not prove that the generated scenarios are factually correct.
+
+Consensus means that validators accepted the outputs as sufficiently equivalent under the defined principle.
+
+It does not mean that the predicted future is guaranteed to be accurate.
+
+---
+
+## Consensus Summary
+
+The report contains fields for consensus information.
+
+The `areas_of_agreement` field may remain empty when scenarios do not contain recurring risks or assumptions that match the deterministic aggregation rules.
+
+This does not necessarily mean that validators disagreed.
+
+It can simply mean that the final scenarios did not contain matching text suitable for the aggregation logic.
+
+---
+
+## Similar Simulation Search
+
+`find_similar_simulations()` is limited to category based matching.
+
+For example, a treasury proposal is matched with previous simulations classified as `treasury`.
+
+The method does not determine whether two proposals are semantically similar.
+
+---
+
+## On Chain Context Scope
+
+External context grounding is currently implemented for the treasury category.
+
+Other proposal categories do not currently have an equivalent external data fetcher.
+
+The feature is also disabled by default and requires owner configuration.
+
+---
+
+## External Data Freshness
+
+Treasury context is retrieved from an external source at simulation time.
+
+The data may change between validator requests.
+
+The context consensus principle therefore allows limited numeric differences between independent validator fetches.
+
+The external data source itself is not permanently stored as an immutable historical oracle.
+
+The simulation stores the context actually used when available, allowing the historical report to be inspected later.
+
+---
+
+## Prompt Injection Mitigation
+
+Proposal text is treated as untrusted input and is separated from system instructions in the generated prompt.
+
+The contract also sanitizes selected delimiter patterns.
+
+These measures reduce common prompt injection patterns but do not constitute a formal security guarantee.
+
+The mitigation has not been demonstrated to prevent every possible adversarial prompt injection technique.
+
+---
+
+## Normalization
+
+The Normalizer is deterministic, but deterministic processing cannot determine whether an LLM scenario is factually correct.
+
+It only ensures that the final report follows the expected structure and applies predefined normalization rules.
+
+Scenario merging may occasionally combine scenarios that are similar according to the implemented similarity logic.
+
+If this reduces the number of final scenarios below the intended minimum, a warning is added to the report.
+
+---
+
+## Empty String Display in GenLayer Studio
+
+Some read methods can legitimately return an empty string when no value was stored.
+
+Depending on the GenLayer Studio interface, an empty string may appear visually as if no response was returned.
+
+This can affect methods such as:
+
+- `get_onchain_context()`
+- `get_source_reference()`
+- `get_variant_parent()`
+
+when the requested simulation has no corresponding value.
+
+This is a display behavior of the interface and does not necessarily indicate a contract execution failure.
+
+---
+
+# Research Status
+
+The project should be treated as a research and demonstration implementation.
+
+It demonstrates a complete workflow combining:
+
+- nondeterministic LLM execution,
+- GenLayer validator consensus,
+- deterministic normalization,
+- structured on chain reports,
+- optional external context,
+- historical simulation data.
+
+It is not an audited production governance system.
+
+The generated reports are intended to support human analysis and discussion, not replace governance processes or human judgment.
